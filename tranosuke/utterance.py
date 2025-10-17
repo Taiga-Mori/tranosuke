@@ -143,7 +143,6 @@ def _clean_join(words: List[str]) -> str:
     text = text.replace(".", "")
     text = text.replace(":", "")
     text = text.replace(";", "")
-    text = text.replace("ー", "")
     text = text.replace("〜", "")
 
     return text
