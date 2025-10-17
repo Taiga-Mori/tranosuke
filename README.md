@@ -17,7 +17,8 @@
 - 最初は辞書やモデルのダウンロードで時間がかかかも
 - [pydomino](https://github.com/DwangoMediaVillage/pydomino/tree/main#)は自分でインストールしてね！
 > pip install -r requirements.txt  
-> pip install git+https://github.com/DwangoMediaVillage/pydomino
+> pip install git+https://github.com/DwangoMediaVillage/pydomino  
+> streamlit run main.py  
 - 長いファイルは短く切った方が精度が上がるかも
 - 基本的に一つの音声ファイルに一人の話者しかいないことを想定してるよ
 - **精度に関しては自己責任で使ってね！**
