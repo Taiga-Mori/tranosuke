@@ -5,14 +5,14 @@ import imageio_ffmpeg as ffmpeg
 ffmpeg_path = ffmpeg.get_ffmpeg_exe()
 os.environ["PATH"] = os.path.dirname(ffmpeg_path) + os.pathsep + os.environ["PATH"]
 
-# このあとに faster-whisper を import
 from faster_whisper import WhisperModel
-
 from pathlib import Path, PosixPath
 from typing import List, Dict
 import pandas as pd
 
-from utils import *
+from tranosuke.utils import *
+
+
 
 def transcribe_utterance(
     audio_path: PosixPath,

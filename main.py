@@ -1,18 +1,12 @@
 import streamlit as st
 from pathlib import Path
-from typing import List
-import numpy as np
-import pandas as pd
 import os
-import pydomino
-import librosa
-import soundfile as sf
 
-from utils import *
-from utterance import *
-from morpheme import *
-from phoneme import *
-from word import *
+from tranosuke.utils import *
+from tranosuke.utterance import *
+from tranosuke.morpheme import *
+from tranosuke.phoneme import *
+from tranosuke.word import *
 
 
 
@@ -21,9 +15,9 @@ def main():
     st.title("書き起こしアプリ とらのすけ")
 
     # --- 画像ファイルパス ---
-    img1_path = resource_path("asset/tranosuke_square.png")  # 初期イメージ
+    img1_path = resource_path("asset/tranosuke.png")  # 初期イメージ
     img2_path = resource_path("asset/tranosuke_transcribing.png")  # 処理中イメージ
-    img3_path = resource_path("asset/tranosuke_transcribing.png")  # 完了イメージ
+    img3_path = resource_path("asset/tranosuke_finish.png")  # 完了イメージ
 
 
 
@@ -44,9 +38,9 @@ def main():
         img_placeholder.image(img1_path)
 
         # --- 入力フォーム ---
-        st.session_state.audio_path = audio_path = Path(st.text_input("音声ファイルはどこ？", "/Users/taigamori/Downloads/sample.mp3"))
-        st.session_state.output_dir = output_dir = Path(st.text_input("どこに保存する？", "/Users/taigamori/Downloads/sample"))
-        st.session_state.quality = quality = st.radio("どっちがいい？", ["スピード優先", "クオリティ優先"])
+        st.session_state.audio_path = audio_path = Path(st.text_input("音声ファイルはどこ？", "例. /Users/username/audio.wav"))
+        st.session_state.output_dir = output_dir = Path(st.text_input("どこに保存する？", "例. /Users/username/audio"))
+        st.session_state.quality = quality = st.radio("どっちがいい？", ["スピード優先!", "クオリティ優先!"])
 
         # --- 解析ボタン ---
         if st.button("書き起こし実行！"):
@@ -61,7 +55,7 @@ def main():
         img_placeholder.image(img2_path)
 
         # --- 辞書と音素モデルのダウンロードと準備 ---
-        with st.spinner("辞書と音素モデルのダウンロードしてるよ"):
+        with st.spinner("辞書と音素モデルのダウンロードしてるよ📦"):
 
             # 辞書と音素モデルのダウンロード
             download(
@@ -78,9 +72,6 @@ def main():
             if not os.path.exists(st.session_state.output_dir):
                 os.makedirs(st.session_state.output_dir)
             
-            # 音声ファイルの名前
-            audio_filename = st.session_state.audio_path.stem
-
 
 
         # --- 書き起こし ---
@@ -125,6 +116,7 @@ def main():
         
             # アラインメントの結果をもとに発話の開始時間を修正
             df_utt_adj = revise_utterance_time(df_utt, df_phon)
+            df_utt_adj["utterance"] = df_utt_adj["utterance"].str.replace("¥", "(.)")
             df_utt_adj.to_csv(st.session_state.output_dir / "utterance.csv", encoding="utf-8_sig", index=None)
 
 

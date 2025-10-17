@@ -6,7 +6,9 @@ from pathlib import Path, PosixPath
 import soundfile as sf
 import os
 
-from utils import *
+from tranosuke.utils import *
+
+
 
 model_path = resource_path("phoneme_transition_model.onnx")
 aligner = pydomino.Aligner(model_path)

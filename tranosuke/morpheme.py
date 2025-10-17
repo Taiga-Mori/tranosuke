@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 import re
 
-from utils import *
+from tranosuke.utils import *
+
+
 
 # kakasiとtaggerの初期化
 kks = pykakasi.kakasi()

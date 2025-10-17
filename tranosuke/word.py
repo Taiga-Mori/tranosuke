@@ -1,6 +1,9 @@
 import pandas as pd
 from typing import List
-from utils import *
+
+from tranosuke.utils import *
+
+
 
 def calculate_word_times(
     df_morph: pd.DataFrame, 
