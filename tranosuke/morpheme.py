@@ -3,14 +3,26 @@ import pykakasi
 import numpy as np
 import pandas as pd
 import re
+import platform
 
-from tranosuke.utils import *
+try:
+    from tranosuke.utils import *
+except:
+    from utils import *
 
 
+
+# 音素モデルのダウンロード
+download(
+    "unidic-csj-202302",
+    "https://clrd.ninjal.ac.jp/unidic_archive/2302/unidic-csj-202302.zip"
+)
 
 # kakasiとtaggerの初期化
 kks = pykakasi.kakasi()
 dic_path = resource_path("unidic-csj-202302")
+if platform.system() == "Windows":
+    dic_path = dic_path.replace("\\", "/")
 tagger = MeCab.Tagger(f"-d {dic_path}")
 tagger.parse('')
 
@@ -182,4 +194,4 @@ def morph_analyze(df_utt: pd.DataFrame) -> pd.DataFrame:
     return df_morph
 
 if __name__ == '__main__':
-    pass
+    print(parse_morphemes(text="すもももももものうち", tagger=tagger, kks=kks))

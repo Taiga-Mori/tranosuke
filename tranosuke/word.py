@@ -1,7 +1,10 @@
 import pandas as pd
 from typing import List
 
-from tranosuke.utils import *
+try:
+    from tranosuke.utils import *
+except:
+    from utils import *
 
 
 

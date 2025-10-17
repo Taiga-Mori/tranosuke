@@ -10,7 +10,10 @@ from pathlib import Path, PosixPath
 from typing import List, Dict
 import pandas as pd
 
-from tranosuke.utils import *
+try:
+    from tranosuke.utils import *
+except:
+    from utils import *
 
 
 
@@ -146,4 +149,9 @@ def _clean_join(words: List[str]) -> str:
     return text
 
 if __name__ == '__main__':
-    pass
+    print(
+        transcribe_utterance(
+            audio_path=Path("C:/Users/mori/Downloads/sample.mp3"),
+            model_name = "large-v3"
+        )
+    )

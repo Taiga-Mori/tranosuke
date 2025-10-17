@@ -6,9 +6,18 @@ from pathlib import Path, PosixPath
 import soundfile as sf
 import os
 
-from tranosuke.utils import *
+try:
+    from tranosuke.utils import *
+except:
+    from utils import *
 
 
+
+# 辞書のダウンロード
+download(
+    "phoneme_transition_model.onnx",
+    "https://github.com/DwangoMediaVillage/pydomino/raw/main/onnx_model/phoneme_transition_model.onnx"
+)
 
 model_path = resource_path("phoneme_transition_model.onnx")
 aligner = pydomino.Aligner(model_path)

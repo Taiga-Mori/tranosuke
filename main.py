@@ -54,26 +54,10 @@ def main():
     elif st.session_state.state == "processing":
         img_placeholder.image(img2_path)
 
-        # --- 辞書と音素モデルのダウンロードと準備 ---
-        with st.spinner("辞書と音素モデルのダウンロードしてるよ📦"):
-
-            # 辞書と音素モデルのダウンロード
-            download(
-                "phoneme_transition_model.onnx",
-                "https://github.com/DwangoMediaVillage/pydomino/raw/main/onnx_model/phoneme_transition_model.onnx"
-            )
-
-            download(
-                "unidic-csj-202302",
-                "https://clrd.ninjal.ac.jp/unidic_archive/2302/unidic-csj-202302.zip"
-            )
-
-            # 保存ディレクトリがなければ作成
-            if not os.path.exists(st.session_state.output_dir):
-                os.makedirs(st.session_state.output_dir)
+        # 保存ディレクトリがなければ作成
+        if not os.path.exists(st.session_state.output_dir):
+            os.makedirs(st.session_state.output_dir)
             
-
-
         # --- 書き起こし ---
         with st.spinner("発話を書き起こしてるよ✏️"):
             if st.session_state.quality == "スピード優先":
