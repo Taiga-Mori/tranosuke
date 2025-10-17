@@ -12,13 +12,13 @@
 - 国立国語研究所の現代話し言葉UniDicを使っているので研究向き！
 
 ## どうやって使うの？
-- AppleシリコンのMacの人は[このzip](https://drive.google.com/file/d/1fQmajQ6BUJDHBexdn78DO2HBFFyxg0ug/view?usp=share_link)ファイルの中の実行ファイル「とらのすけ」をクリックするだけで使える（かも）!
+- アプリとして使いたい人は[このドライブ](https://drive.google.com/drive/folders/17CF5nJsM1CEM40yz92yw-vfYhettvGfd?usp=sharing)から自分の環境に合ったzipファイルをダウンロードして、中の実行ファイル「とらのすけ」をクリックするだけで使える（かも）よ!
 - Pythonから使う人は必要なパッケージをインストールしてね
-- 最初は辞書やモデルのダウンロードで時間がかかかも
 - [pydomino](https://github.com/DwangoMediaVillage/pydomino/tree/main#)は自分でインストールしてね！
 > pip install -r requirements.txt  
 > pip install git+https://github.com/DwangoMediaVillage/pydomino  
 > streamlit run main.py  
+- 最初は辞書やモデルのダウンロードで時間がかかかも💦
 - 長いファイルは短く切った方が精度が上がるかも
 - 基本的に一つの音声ファイルに一人の話者しかいないことを想定してるよ
 - **精度に関しては自己責任で使ってね！**
