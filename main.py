@@ -84,22 +84,18 @@ def main():
 
         # --- 強制アラインメント ---
         with st.spinner("強制アラインメントをしてるよ🔍"):
-            if st.session_state.quality == "スピード優先":
-                iterations = 3
-            else:
-                iterations = 5
-            df_phon = forced_align(st.session_state.audio_path, df_utt, df_morph, iterations)
+            df_phon = forced_align(st.session_state.audio_path, df_utt, df_morph, 3)
             df_phon.to_csv(st.session_state.output_dir / "phoneme.csv", encoding="utf-8_sig", index=None)
 
 
 
         # --- アラインメントの結果をもとに単語にセグメント情報を追加し発話の開始終了時間を修正 ---
         with st.spinner("単語にセグメント情報を追加してるよ⏰"):
-            df_word = add_segment(df_utt, df_morph_cleaned, df_phon)
+            df_word = add_segment(df_morph_cleaned, df_phon)
             df_word.to_csv(st.session_state.output_dir / "word.csv", encoding="utf-8_sig", index=None)
         
             # アラインメントの結果をもとに発話の開始時間を修正
-            df_utt_adj = revise_utterance_time(df_utt, df_phon)
+            df_utt_adj = adjust_utterance_time(df_utt, df_phon)
             df_utt_adj["utterance"] = df_utt_adj["utterance"].str.replace("¥", "(.)")
             df_utt_adj.to_csv(st.session_state.output_dir / "utterance.csv", encoding="utf-8_sig", index=None)
 

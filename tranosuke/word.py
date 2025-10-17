@@ -70,7 +70,6 @@ def calculate_word_times(
     return result
 
 def add_segment(
-        df_utt: pd.DataFrame,
         df_morph: pd.DataFrame,
         df_phon: pd.DataFrame,
         ) -> pd.DataFrame:
@@ -87,7 +86,7 @@ def add_segment(
 
     df_word = pd.merge(df_morph, df_temp, on=["utteranceID", "nth"], how='left')
 
-    filename = df_utt["filename"][0]
+    filename = df_phon["filename"][0]
 
     df_word["timestamp"] = df_word["startTime"].apply(float_to_timecode)
     df_word["wordID"] = df_word["timestamp"].astype(str) + filename

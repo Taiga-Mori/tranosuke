@@ -55,8 +55,12 @@ def forced_align(
             # 発話中の音声の切り出し
             y, sr = sf.read(audio_path)  # y.shape -> (サンプル数, チャンネル数)
 
-            start_sample = int((utt_start_time) * sr)
-            end_sample   = int((utt_end_time) * sr)
+            # Whisperは前にずれている傾向にあるので開始と終了を少し遅くする
+            start_delay = 0.2
+            end_buffa = 0.2
+
+            start_sample = int((utt_start_time + start_delay) * sr)
+            end_sample   = int((utt_end_time + end_buffa) * sr)
 
             cut_channel = y[start_sample:end_sample]
 
@@ -64,12 +68,12 @@ def forced_align(
 
             # Forced alignment
             try:
-                phonemes = parse_phonemes(temp_path, phoneme_sequence, iterations)
+                phonemes = parse_phonemes(temp_path, f"pau {phoneme_sequence} pau", iterations)
 
                 for (_start_time, _end_time, phoneme) in phonemes:
 
-                    phon_start_time = float(round(_start_time + utt_start_time, 4))
-                    phon_end_time = float(round(_end_time + utt_start_time, 4))
+                    phon_start_time = float(round(_start_time + utt_start_time + start_delay, 4))
+                    phon_end_time = float(round(_end_time + utt_start_time + start_delay, 4))
 
                     data.append([filename, utteranceID, phon_start_time, phon_end_time, phoneme])
 

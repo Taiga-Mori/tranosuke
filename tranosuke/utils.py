@@ -83,33 +83,33 @@ def float_to_timecode(value: float) -> str:
 
     return s
 
-def revise_utterance_time(
+def adjust_utterance_time(
         df_utt: pd.DataFrame,
         df_phon: pd.DataFrame
         ) -> pd.DataFrame:
     
-    df_utt_phon = pd.merge(df_utt, df_phon[["utteranceID", "startTime", "endTime"]], on="utteranceID", how="left", suffixes=("_utt", "_phon"))
-
-    df_utt_adj = (
-        df_utt_phon.groupby("utteranceID")
-        .apply(lambda g: pd.Series({
-            "filename": g["filename"].iloc[0],
-            "tier": g["tier"].iloc[0],
-            "utterance": g["utterance"].iloc[0],
-            "startTime": max(
-                g["startTime_utt"].iloc[0],
-                g["startTime_phon"].min() if pd.notna(g["startTime_phon"]).any() else g["startTime_utt"].iloc[0]
-            ),
-            "endTime": min(
-                g["endTime_utt"].iloc[0],
-                g["endTime_phon"].max() if pd.notna(g["endTime_phon"]).any() else g["endTime_utt"].iloc[0]
-            )
-        }))
+    # 音素の最小・最大時刻を utteranceID ごとに取得
+    phon_range = (
+        df_phon.groupby("utteranceID")
+        .agg(startTime_phon=("startTime", "min"),
+        endTime_phon=("endTime", "max"))
         .reset_index()
     )
-    df_utt_adj = df_utt_adj[["filename", "tier", "utteranceID", "startTime", "endTime", "utterance"]]
+    
+    df_adjusted = pd.merge(df_utt, phon_range, on="utteranceID", how="left")
 
-    return df_utt_adj
+    # 音素の時間に基づいて更新（音素がない場合は元の値を保持）
+    df_adjusted["startTime"] = df_adjusted.apply(
+        lambda r: r["startTime_phon"] if pd.notna(r["startTime_phon"]) else r["startTime"], axis=1
+    )
+    df_adjusted["endTime"] = df_adjusted.apply(
+        lambda r: r["endTime_phon"] if pd.notna(r["endTime_phon"]) else r["endTime"], axis=1
+    )
+
+    # 不要な中間列を削除
+    df_adjusted = df_adjusted.drop(columns=["startTime_phon", "endTime_phon"])
+
+    return df_adjusted
 
 def resource_path(relative_path):
     """PyInstallerでも正しくリソースにアクセスできるようにする"""
