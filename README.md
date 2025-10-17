@@ -1,5 +1,5 @@
 # 書き起こしアプリ  とらのすけ ベータ版
-!["とらのすけ"]("https://github.com/Taiga-Mori/tranosuke/blob/main/asset/tranosuke.png")
+!["とらのすけ"]("./asset/tranosuke.png")
 
 ## 何のためのアプリ？
 研究用の発話の書き起こしアプリだよ！
@@ -12,7 +12,7 @@
 - 国立国語研究所の現代話し言葉UniDicを使っているので研究向き！
 
 ## どうやって使うの？
-- AppleシリコンのMacの人は[このzip]()ファイルの中の実行ファイル「とらのすけ」をクリックするだけで使える（かも）!
+- AppleシリコンのMacの人は[このzip](https://drive.google.com/file/d/1fQmajQ6BUJDHBexdn78DO2HBFFyxg0ug/view?usp=share_link)ファイルの中の実行ファイル「とらのすけ」をクリックするだけで使える（かも）!
 - Pythonから使う人は必要なパッケージをインストールしてね
 - 最初は辞書やモデルのダウンロードで時間がかかかも
 - [pydomino](https://github.com/DwangoMediaVillage/pydomino/tree/main#)は自分でインストールしてね！
