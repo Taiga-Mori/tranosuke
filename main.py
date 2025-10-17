@@ -96,7 +96,7 @@ def main():
         
             # アラインメントの結果をもとに発話の開始時間を修正
             df_utt_adj = adjust_utterance_time(df_utt, df_phon)
-            df_utt_adj["utterance"] = df_utt_adj["utterance"].str.replace("¥", "(.)")
+            df_utt_adj["utterance"] = df_utt_adj["utterance"].str.replace("¥", "")
             df_utt_adj.to_csv(st.session_state.output_dir / "utterance.csv", encoding="utf-8_sig", index=None)
 
 
