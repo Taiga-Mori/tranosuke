@@ -3,30 +3,13 @@ import pykakasi
 import numpy as np
 import pandas as pd
 import re
-import platform
 
-try:
-    from tranosuke.utils import *
-except:
-    from utils import *
+from init import *
+from utils import *
 
 
 
-# 音素モデルのダウンロード
-download(
-    "unidic-csj-202302",
-    "https://clrd.ninjal.ac.jp/unidic_archive/2302/unidic-csj-202302.zip"
-)
-
-# kakasiとtaggerの初期化
-kks = pykakasi.kakasi()
-dic_path = resource_path("unidic-csj-202302")
-if platform.system() == "Windows":
-    dic_path = dic_path.replace("\\", "/")
-tagger = MeCab.Tagger(f"-d {dic_path}")
-tagger.parse('')
-
-def kana2roman(kana: str, kks=kks) -> str:
+def kana2roman(kana: str, kks) -> str:
     """
     カナ文字列をローマ字列に変換する。
     """
@@ -38,6 +21,8 @@ def kana2roman(kana: str, kks=kks) -> str:
         result.append(w['hepburn'])
     roman = "".join(result)
     return roman
+
+
 
 def roman2phonemes(roman: str) -> str:
     """
@@ -115,7 +100,9 @@ def roman2phonemes(roman: str) -> str:
     phonemes = " ".join(toks)
     return phonemes
 
-def parse_morphemes(text: str, tagger=tagger, kks=kks) -> list:
+
+
+def parse_morphemes(text: str, tagger, kks) -> list:
     node = tagger.parseToNode(text)
     morphemes = []
     while node:
@@ -125,7 +112,7 @@ def parse_morphemes(text: str, tagger=tagger, kks=kks) -> list:
         morpheme = node.feature.split(',')
         morpheme.insert(0, surface)
         # 文頭・文末記号ではないかつ補助記号ではないなら
-        if morpheme[1] != u'BOS/EOS' and morpheme[1] != u'補助記号':
+        if morpheme[1] != u'BOS/EOS':
             # 未知語ではないなら(解析結果が30個なら)
             if len(morpheme) >= 15:
                 # "orth", "pos", "pos1", "pos2", "pos3", "cForm", "cType", "lemma", "ruby", "pron"
@@ -134,7 +121,13 @@ def parse_morphemes(text: str, tagger=tagger, kks=kks) -> list:
                 morpheme =  [morpheme[i] for i in [0, 1, 2, 3, 4]] + [np.nan for i in range(0, 5)]
         
             morpheme = [np.nan if m == "*" else m for m in morpheme]
-
+            
+            # 記号でpronがないなら追加（#と%）他にも？
+            if morpheme[0] == "#":
+                morpheme[-1] = "シャープ"
+            if morpheme[0] == "%":
+                morpheme[-1] = "パーセント"
+            
             # 未知語でpronがないならorthをカタカナに変換
             if pd.isna(morpheme[-1]):
                 result = kks.convert(morpheme[0])
@@ -145,7 +138,7 @@ def parse_morphemes(text: str, tagger=tagger, kks=kks) -> list:
                 morpheme[-1] = kana
 
             # 音素追加
-            roman = kana2roman(morpheme[-1])
+            roman = kana2roman(morpheme[-1], kks)
             phonemes = roman2phonemes(roman)
             # もしphonemesがアルファベットと半角スペース以外なら
             if bool(re.search(r"[^A-Za-z ]", phonemes)):
@@ -165,6 +158,8 @@ def parse_morphemes(text: str, tagger=tagger, kks=kks) -> list:
         sublist.append(length)
     return morphemes
 
+
+
 def morph_analyze(df_utt: pd.DataFrame) -> pd.DataFrame:
     """
     Args:
@@ -174,24 +169,34 @@ def morph_analyze(df_utt: pd.DataFrame) -> pd.DataFrame:
         pandas.DataFrame で列 ["file", "utteranceID", "startTime", "endTime", "utterance"] （start,end は秒, float）
     """
 
+    # kakasiの初期化
+    kks = pykakasi.kakasi()
+
+    # taggerの初期化
+    dic_path = CACHE_DIR / "unidic-csj-202302"
+    if SYSTEM == "Windows":
+        dic_path = dic_path.replace("\\", "/")
+    tagger = MeCab.Tagger(f"-d {dic_path}")
+    tagger.parse('')
+
     result = []
     for _, row in df_utt.iterrows():
         filename = row["filename"]
+        speaker = row["speaker"]
         utteranceID = row["utteranceID"]
         utterance = row["utterance"]
 
         if not pd.notna(utterance):
             continue
 
-        morphemes = parse_morphemes(utterance)
-        result = result  + [[filename, utteranceID] + sublist for sublist in morphemes]
+        morphemes = parse_morphemes(utterance, tagger, kks)
+        result = result  + [[filename, speaker, utteranceID] + sublist for sublist in morphemes]
     
     df_morph = pd.DataFrame(
         result,
-        columns=["filename", "utteranceID", "orth", "pos", "pos1", "pos2", "pos3", "cForm", "cType", "lemma", "ruby", "pron", "phonemes", "nth", "len"]
+        columns=["filename", "speaker", "utteranceID", "orth", "pos", "pos1", "pos2", "pos3", "cForm", "cType", "lemma", "ruby", "pron", "phonemes", "nth", "len"]
         )
-    
     return df_morph
 
 if __name__ == '__main__':
-    print(parse_morphemes(text="すもももももものうち", tagger=tagger, kks=kks))
+    pass

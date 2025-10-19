@@ -3,7 +3,6 @@ import pandas as pd
 import os
 import requests
 import zipfile
-import sys
 
 
 
@@ -11,50 +10,49 @@ def download(path: str, url: str):
     """
     指定されたパス（ファイルまたはディレクトリ）が存在しない場合、
     指定されたURLからダウンロードし、zipなら自動解凍する。
-    zipファイルの場合、同名のディレクトリを作って展開する。
+    Args:
+        path (str): 確認したいファイルまたはディレクトリ
+        url (str): ダウンロード先のリンク
     """
-    path = resource_path(path)
-    # すでに存在する場合
-    if os.path.exists(path):
-        print(f"✅ '{path}' は既に存在します。ダウンロードをスキップします。")
-        return
 
-    # ダウンロード先のファイル名を決定
-    filename = os.path.basename(url)
-    download_path = os.path.join(os.getcwd(), filename)
+    path = Path(path).expanduser()
+    target_dir = path.parent
+    target_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"⬇️ '{url}' から '{download_path}' にダウンロードします...")
-
-    # ダウンロード実行
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
-
-    with open(download_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
-
-    print("✅ ダウンロード完了")
-
-    # zipファイルなら解凍
-    if zipfile.is_zipfile(download_path):
-        # 展開先ディレクトリ名
-        zip_name = os.path.splitext(filename)[0]  # 'xx.zip' -> 'xx'
-        extract_dir = os.path.join(os.getcwd(), zip_name)
-
-        os.makedirs(extract_dir, exist_ok=True)
-        print(f"📦 zipファイルを '{extract_dir}' に解凍中...")
-
-        with zipfile.ZipFile(download_path, "r") as zip_ref:
-            zip_ref.extractall(extract_dir)
-
-        print("✅ 解凍完了")
-
-        # 元のzipファイルを削除（必要ならコメントアウト）
-        os.remove(download_path)
-        print(f"🧹 '{download_path}' を削除しました。")
+    # すでに存在する場合はスキップ
+    if path.exists():
+        print(f"'{path}' は既に存在します。ダウンロードをスキップします。")
 
     else:
-        print("📄 zipファイルではありません。ダウンロードのみ完了。")
+        print(f"'{path}' が存在しません。'{url}' から取得します...")
+
+        # ダウンロード先の一時ファイル
+        tmp_path = target_dir / os.path.basename(url)
+
+        # ダウンロード実行
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(tmp_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        print(f"ダウンロード完了: {tmp_path}")
+
+        # zipファイルなら解凍
+        if zipfile.is_zipfile(tmp_path):
+            print(f"zipファイルを '{target_dir / path.name}' に解凍中...")
+            with zipfile.ZipFile(tmp_path, "r") as zip_ref:
+                zip_ref.extractall(target_dir / path.name)
+            print("解凍完了")
+
+            # zip削除（必要に応じて保持したいならコメントアウト）
+            tmp_path.unlink()
+            print(f"一時ファイル '{tmp_path.name}' を削除しました。")
+
+        else:
+            print("zipファイルではありません。ダウンロードのみ完了。")
+
+
 
 def float_to_timecode(value: float) -> str:
     """
@@ -83,11 +81,24 @@ def float_to_timecode(value: float) -> str:
 
     return s
 
+
+
 def adjust_utterance_time(
         df_utt: pd.DataFrame,
         df_phon: pd.DataFrame
         ) -> pd.DataFrame:
+    """
+    Whisperの時間はファジーなので発話の開始時間を最初の音素の開始時間に、
+    発話の終了時間を最後の音素の終了時間に修正する
     
+    Args:
+        df_utt (pd.DataFrame): 発話のデータフレーム
+        df_phon (pd.DataFrame): 音素のデータフレーム
+
+    Returns:
+        df_adjusted (pd.DataFrame): 修正された発話のデータフレーム
+    """
+
     # 音素の最小・最大時刻を utteranceID ごとに取得
     phon_range = (
         df_phon.groupby("utteranceID")
@@ -106,18 +117,12 @@ def adjust_utterance_time(
         lambda r: r["endTime_phon"] if pd.notna(r["endTime_phon"]) else r["endTime"], axis=1
     )
 
-    # 不要な中間列を削除
+    # 不要な列を削除
     df_adjusted = df_adjusted.drop(columns=["startTime_phon", "endTime_phon"])
 
     return df_adjusted
 
-def resource_path(relative_path):
-    """PyInstallerでも正しくリソースにアクセスできるようにする"""
-    if hasattr(sys, "_MEIPASS"):
-        base_path = sys._MEIPASS  # PyInstallerでの一時展開先
-    else:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+
 
 if __name__ == '__main__':
     pass

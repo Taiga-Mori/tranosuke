@@ -1,156 +1,193 @@
 import os
-import imageio_ffmpeg as ffmpeg
-
-# ffmpeg実行パスを取得
-ffmpeg_path = ffmpeg.get_ffmpeg_exe()
-os.environ["PATH"] = os.path.dirname(ffmpeg_path) + os.pathsep + os.environ["PATH"]
-
 from faster_whisper import WhisperModel
 from pathlib import Path, PosixPath
-from typing import List, Dict
+import torchaudio
 import pandas as pd
+from pathlib import Path
+from faster_whisper import WhisperModel
+from pyannote.audio import Pipeline
+from pyannote.audio.pipelines.utils.hook import ProgressHook
+from pyannote.core import Segment
+import tempfile
+import soundfile as sf
+import yaml
 
-try:
-    from tranosuke.utils import *
-except:
-    from utils import *
+from init import *
+from utils import *
+
+
+
+def merge_consecutive_turns(speaker_diarization):
+    """
+    同じ話者が連続する区間をまとめる
+    """
+    merged_turns = []
+
+    # タイムライン順に取得（yield_label=True で speaker 情報を含む）
+    speaker_turns = sorted(
+        list(speaker_diarization.itertracks(yield_label=True)),
+        key=lambda x: x[0].start
+    )
+
+    if not speaker_turns:
+        return merged_turns
+
+    prev_turn, _, prev_speaker = speaker_turns[0]
+
+    for turn, _, speaker in speaker_turns[1:]:
+        # 同一話者が直後に続く場合、区間を拡張
+        if speaker == prev_speaker:
+            prev_turn = Segment(prev_turn.start, max(prev_turn.end, turn.end))
+        else:
+            merged_turns.append((prev_turn, prev_speaker))
+            prev_turn, prev_speaker = turn, speaker
+
+    merged_turns.append((prev_turn, prev_speaker))
+    return merged_turns
 
 
 
 def transcribe_utterance(
-    audio_path: PosixPath,
+    audio_path: Path,
     model_name: str = "turbo",
     max_gap_ms: int = 200,
     device: str = "cpu",
     beam_size: int = 5,
 ) -> pd.DataFrame:
     """
-    Args:
-        audio_path: 音声ファイルのパス
-        model_name: faster-whisper のモデル名（例 "small", "medium"...）
-        max_gap_ms: 単語間のギャップがこのミリ秒以下なら同一発話として結合
-        device: "cpu" or "cuda"
-        beam_size: デコーダの beam size（精度/速度トレードオフ）
-    
+    fast-whisperで単語を書き起こし、話者埋め込みとクラスタリングによって
+    話者ごとに0.2秒以内の単語を結合して発話化する。
+
     Returns:
-        pandas.DataFrame で列 ["file", "Utterance_x", "utteranceID", "startTime", "endTime", "utterance"] （start,end は秒, float）
+        DataFrame(["filename", "tier", "utteranceID", "startTime", "endTime", "speaker", "utterance"])
     """
+    audio_path = Path(audio_path)
+    filename = audio_path.stem
 
-    # 音声ファイルの名前
-    audio_filename = audio_path.stem
+    # 1. 音声読み込み
+    wav, sr = torchaudio.load(str(audio_path))
+    if wav.ndim > 1:
+        wav = wav.mean(dim=0, keepdim=True)
+    wav = wav.squeeze(0).numpy()
 
-    # モデルロード
+    # 2. Whisperモデル
     model = WhisperModel(model_name, device=device)
 
-    # 音声を transcribe（word_timestamps=True で単語ごとの start/end を取得）
-    segments, _ = model.transcribe(
-        audio_path,
-        beam_size=beam_size,
-        word_timestamps=True
+    # 3. Pyannote話者分離
+    with open(CONFIG_PATH, encoding='utf-8')as f:
+            config = yaml.safe_load(f)
+    HUGGINGFACE_ACCESS_TOKEN = config["HUGGINGFACE_ACCESS_TOKEN"]
+
+    pipeline = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-community-1",
+        token=HUGGINGFACE_ACCESS_TOKEN
     )
 
-    # 全単語を時系列で収集（segment 内の words を順に取る）
-    words: List[Dict] = []
-    for seg in segments:
-        # seg.words は [{'start':..., 'end':..., 'word':...}, ...] のはず
-        seg_words = getattr(seg, "words", None)
-        if seg_words is None:
-            # もし構造が dict の場合などに備えて柔軟に扱う
-            seg_words = seg.get("words", []) if isinstance(seg, dict) else []
-        for w in seg_words:
-            # w が dict または object-like の場合に対応
-            if isinstance(w, dict):
-                words.append({"start": float(w["start"]), "end": float(w["end"]), "word": w["word"]})
-            else:
-                # object with attributes
-                words.append({"start": float(getattr(w, "start")), "end": float(getattr(w, "end")), "word": getattr(w, "word")})
+    with ProgressHook() as hook:
+        diarization = pipeline(str(audio_path), hook=hook)
 
-    if len(words) == 0:
-        # 単語が取れなかった場合は空の DataFrame を返す
-        return pd.DataFrame(columns=["start", "end", "text"])
+    merged_turns = merge_consecutive_turns(diarization.speaker_diarization)
 
-    # 単語間のギャップでグループ化
     utterances = []
-    cur_words = [words[0]["word"]]
-    cur_start = words[0]["start"]
-    cur_end = words[0]["end"]
-    prev_end = words[0]["end"]
 
-    max_gap_s = max_gap_ms / 1000.0
+    # 4. 各話者区間ごとに単語認識
+    for turn, speakerID in merged_turns:
+        start_sample = int(turn.start * sr)
+        end_sample = int(turn.end * sr)
+        num = int(speakerID[-2:])
+        speaker = chr(ord("A") + num)
 
-    for w in words[1:]:
-        gap = float(w["start"]) - float(prev_end)
-        if gap <= max_gap_s:
-            # 同じ発話に結合
-            # gap が 0.1 秒以上なら "¥" を追加
-            if gap >= 0.1:
-                pause_word = {
-                    "word": "¥",
-                    "start": prev_end,
-                    "end": w["start"]
-                }
-                # ¥も単語列に追加
-                cur_words.append(pause_word["word"])
-            # 次の単語を追加
-            cur_words.append(w["word"])
-            cur_end = w["end"]
-        else:
-            # 発話を確定して次へ
-            text = _clean_join(cur_words)
+        segment_audio = wav[start_sample:end_sample]
+        
+        # 一時ファイルで書き出し
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav_file:
+            tmp_path = tmp_wav_file.name
+            sf.write(tmp_path, segment_audio, sr)
+
+        # Whisper で単語単位認識
+        segments, _ = model.transcribe(
+            tmp_wav_file.name,
+            beam_size=beam_size,
+            word_timestamps=True,
+            language="ja"
+        )
+
+        # 一時ファイルの削除
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+        words = []
+        for seg in segments:
+            seg_words = getattr(seg, "words", [])
+            for w in seg_words:
+                start = float(w["start"] if isinstance(w, dict) else w.start)
+                end = float(w["end"] if isinstance(w, dict) else w.end)
+                word = (w["word"] if isinstance(w, dict) else w.word).strip()
+                # 音声全体タイムスタンプに合わせる
+                words.append({"start": start + turn.start, "end": end + turn.start, "word": word})
+
+        if not words:
+            continue
+
+        # 5. 単語間0.2秒以内で結合
+        max_gap_s = max_gap_ms / 1000.0
+        cur_words = [words[0]["word"]]
+        cur_start = words[0]["start"]
+        cur_end = words[0]["end"]
+        prev_end = cur_end
+
+        for w in words[1:]:
+            gap = w["start"] - prev_end
+            # ポーズ用の記号（最終的には消される）
+            if gap <= max_gap_s:
+                if gap >= 0.1:
+                    cur_words.append("¥")
+                cur_words.append(w["word"])
+                cur_end = w["end"]
+            else:
+                utterances.append({
+                    "filename": filename,
+                    "speaker": speaker,
+                    "tier": f"Utterance_{speaker}",
+                    "utteranceID": f"{float_to_timecode(cur_start)}{speaker}",
+                    "startTime": round(cur_start, 3),
+                    "endTime": round(cur_end, 3),
+                    "utterance": _clean_join(cur_words)
+                })
+                cur_words = [w["word"]]
+                cur_start = w["start"]
+                cur_end = w["end"]
+            prev_end = w["end"]
+
+        # 最後の発話を追加
+        if cur_words:
             utterances.append({
-                "startTime": cur_start,
-                "endTime": cur_end,
-                "utterance": text
+                "filename": filename,
+                "speaker": speaker,
+                "tier": f"Utterance_{speaker}",
+                "utteranceID": f"{float_to_timecode(cur_start)}{speaker}",
+                "startTime": round(cur_start, 3),
+                "endTime": round(cur_end, 3),
+                "utterance": _clean_join(cur_words)
             })
-            # 新しい発話スタート
-            cur_words = [w["word"]]
-            cur_start = w["start"]
-            cur_end = w["end"]
 
-        prev_end = w["end"]
-
-    # 最後の発話を追加
-    if cur_words:
-        text = _clean_join(cur_words)
-        utterances.append({"startTime": cur_start, "endTime": cur_end, "utterance": text})
-
-    df = pd.DataFrame(utterances, columns=["startTime", "endTime", "utterance"])
-    df["timestamp"] = df["startTime"].apply(float_to_timecode)
-    df["filename"] = audio_filename
-    df["utteranceID"] = df["timestamp"].astype(str) + audio_filename
-    df["tier"] = f"Utterance_{audio_filename}"
-    df = df[["filename", "tier", "utteranceID", "startTime", "endTime", "utterance"]]
+    df = pd.DataFrame(utterances)
     return df
 
 
-def _clean_join(words: List[str]) -> str:
-    """
-    単語リストを自然に連結する小さなヘルパー。
-    whisper の出力には先頭にスペースがついた単語や
-    サブトークン分割（例: "ing" が単独）などが混在する場合があるため、
-    基本はスペースで結合して余分な空白を詰める処理をする。
-    必要ならここを拡張して区切り記号処理や句読点の整形を行ってください。
-    """
-    text = "".join(w.strip() for w in words if w is not None)
 
-    # スペースの除去
-    text = text.replace(" ", "")
-
-    # 句読点や記号の除去
-    text = text.replace("、", "")
-    text = text.replace("。", "")
-    text = text.replace(",", "")
-    text = text.replace(".", "")
-    text = text.replace(":", "")
-    text = text.replace(";", "")
-    text = text.replace("〜", "")
-
+def _clean_join(words):
+    """不要な空白や記号を除去して自然に結合"""
+    text = "".join(w.strip() for w in words if w)
+    for ch in [" ", "、", "。", ",", ".", ":", ";", "〜"]:
+        text = text.replace(ch, "")
     return text
 
+
+
 if __name__ == '__main__':
-    print(
-        transcribe_utterance(
-            audio_path=Path("C:/Users/mori/Downloads/sample.mp3"),
-            model_name = "large-v3"
-        )
-    )
+    df = transcribe_utterance(
+            audio_path="./sample/sample.wav",
+            )
+    print(df)
+    df.to_csv("./sample/utterance.csv", index=False)

@@ -1,17 +1,13 @@
 import pandas as pd
-from typing import List
 
-try:
-    from tranosuke.utils import *
-except:
-    from utils import *
+from utils import *
 
 
 
 def calculate_word_times(
     df_morph: pd.DataFrame, 
     df_phon: pd.DataFrame
-) -> List[List]:
+    ):
     """
     形態素解析結果と音素のforced alignment結果から
     各単語の開始・終了時間を求める。
@@ -69,7 +65,9 @@ def calculate_word_times(
 
     return result
 
-def add_segment(
+
+
+def add_word_segment(
         df_morph: pd.DataFrame,
         df_phon: pd.DataFrame,
         ) -> pd.DataFrame:
@@ -86,13 +84,11 @@ def add_segment(
 
     df_word = pd.merge(df_morph, df_temp, on=["utteranceID", "nth"], how='left')
 
-    filename = df_phon["filename"][0]
-
     df_word["timestamp"] = df_word["startTime"].apply(float_to_timecode)
-    df_word["wordID"] = df_word["timestamp"].astype(str) + filename
-    df_word["tier"] = f"Word_{filename}"
+    df_word["wordID"] = df_word["timestamp"].astype(str) + df_word["speaker"].astype(str)
+    df_word["tier"] = "Word_" + df_word["speaker"].astype(str)
     df_word = df_word[[
-        'filename', 'tier', 'utteranceID', 'wordID', 'startTime', 'endTime', 
+        'filename', 'speaker', 'tier', 'utteranceID', 'wordID', 'startTime', 'endTime', 
         'orth', 'pos', 'pos1', 'pos2', 'pos3', 'cForm', 'cType', 'lemma', 'ruby', 'pron', 'phonemes', 'nth', 'len'
         ]]
     
