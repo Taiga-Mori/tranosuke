@@ -60,6 +60,10 @@
 6. 音素のセグメント情報から単語の開始時間と終了時間を逆算
 7. 発話の開始時間と終了時間を音素のセグメント情報で修正
 
+## 今後の展望
+- ノイズ抑制機能の追加
+- 精度の検証
+
 ## クレジット
 - [pyannote](https://github.com/pyannote/pyannote-audio)
 - [fast-whisper](https://github.com/AIXerum/faster-whisper)
