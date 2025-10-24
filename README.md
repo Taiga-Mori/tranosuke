@@ -39,7 +39,7 @@
 - GPUなしの場合  
 > docker run -p 8501:8501 -v /User/username/audio:/tranosuke/audio tranosuke  
 - GPUありの場合  
-> docker run --gpus all　-p 8501:8501 -v /User/username/audio:/tranosuke/audio tranosuke  
+> docker run --gpus all -p 8501:8501 -v /User/username/audio:/tranosuke/audio tranosuke  
 - 起動に成功したらブラウザで[https://localhost:8501](https://localhost:8501)にアクセスしてね！  
 - /User/username/audio/audio.wavを書き起こしたい場合は「./audio/audio.wav」と入力してね
 
