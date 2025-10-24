@@ -175,7 +175,7 @@ def morph_analyze(df_utt: pd.DataFrame) -> pd.DataFrame:
     # taggerの初期化
     dic_path = CACHE_DIR / "unidic-csj-202302"
     if SYSTEM == "Windows":
-        dic_path = dic_path.replace("\\", "/")
+        dic_path = str(dic_path).replace("\\", "/")
     tagger = MeCab.Tagger(f"-d {dic_path}")
     tagger.parse('')
 
