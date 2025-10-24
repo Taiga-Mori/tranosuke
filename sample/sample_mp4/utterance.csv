@@ -1,0 +1,5 @@
+﻿filename,speaker,tier,utteranceID,startTime,endTime,utterance
+sample_mp4_processed,B,Utterance_B,000537B,0.537,7.717,このアプリは音声の書き起こしや携帯素解析単語や音素のセグメントができるんだって
+sample_mp4_processed,A,Utterance_A,008333A,8.333,9.193,へえそうなんだ
+sample_mp4_processed,A,Utterance_A,009513A,9.733,10.803,それはすごいね
+sample_mp4_processed,B,Utterance_B,011354B,11.354,13.754,でしょみんなも使ってみてね

@@ -123,7 +123,6 @@ pycparser==2.23
 pydantic==2.12.2
 pydantic_core==2.41.4
 pydeck==0.9.1
-pydomino @ file:///Users/taigamori/Works/tranosuke/pydomino
 pydub==0.25.1
 Pygments==2.19.2
 pyinstaller==6.16.0
