@@ -18,7 +18,7 @@
 3. アクセストークンを[発行](https://hf.co/settings/tokens)してね（一番上のToken typeでReadを選んでね） 
 
 ## アプリとして使う （Apple Silicon Mac）
-[ここ](https://drive.google.com/drive/folders/17CF5nJsM1CEM40yz92yw-vfYhettvGfd?usp=sharing)からアプリをダウンロードしてね!
+- [ここ](https://drive.google.com/drive/folders/17CF5nJsM1CEM40yz92yw-vfYhettvGfd?usp=sharing)からアプリをダウンロードしてね!
 - 警告が出たら「システム設定」 → 「プライバシーとセキュリティ」から解除してね！
 
 ## pythonから使う
@@ -41,6 +41,7 @@
 - GPUありの場合  
 > docker run --gpus all　-p 8501:8501 -v /User/username/audio:/tranosuke/audio tranosuke  
 - 起動に成功したらブラウザで[https://localhost:8501](https://localhost:8501)にアクセスしてね！  
+- /User/username/audio/audio.wavを書き起こしたい場合は「./audio/audio.wav」と入力してね
 
 ## 書き起こし結果
 - 入力した音声（映像）ファイルと同じフォルダーに結果のフォルダーができるよ
