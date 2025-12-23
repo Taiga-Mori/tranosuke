@@ -2,7 +2,7 @@
 <preferences version="1.1"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.mpi.nl/tools/elan/Prefs_v1.1.xsd">
     <pref key="FrameSize">
-        <Object class="java.awt.Dimension">1470,846</Object>
+        <Object class="java.awt.Dimension">1470,832</Object>
     </pref>
     <pref key="LayoutManager.SelectedTabIndex">
         <Int>7</Int>
@@ -14,7 +14,7 @@
         <String>Utterance_B</String>
     </pref>
     <pref key="SelectionEndTime">
-        <Long>9464</Long>
+        <Long>2907</Long>
     </pref>
     <pref key="SignalViewer.ZoomLevel">
         <Float>194.00002</Float>
@@ -23,7 +23,7 @@
         <Int>1</Int>
     </pref>
     <pref key="SignalViewer.VerticalZoomLevel">
-        <Int>300</Int>
+        <Int>500</Int>
     </pref>
     <prefGroup key="CommentViewer.Columns">
         <pref key="Sender">
@@ -79,7 +79,7 @@
         <Float>194.00002</Float>
     </pref>
     <pref key="SelectionBeginTime">
-        <Long>9464</Long>
+        <Long>2157</Long>
     </pref>
     <prefList key="MultiTierViewer.HiddenTiers">
         <String>default</String>
@@ -103,10 +103,10 @@
         </pref>
     </prefGroup>
     <pref key="TimeScaleBeginTime">
-        <Long>6804</Long>
+        <Long>0</Long>
     </pref>
     <pref key="MediaTime">
-        <Long>9464</Long>
+        <Long>2907</Long>
     </pref>
     <prefGroup key="TierColors">
         <pref key="Phoneme_A">
@@ -141,7 +141,7 @@
         <String>Phoneme_A</String>
     </prefList>
     <pref key="LayoutManager.SplitPaneDividerLocation">
-        <Int>70</Int>
+        <Int>77</Int>
     </pref>
     <prefList key="CommentViewer.Columns.Hidden">
         <String>Sender</String>
