@@ -30,7 +30,7 @@ def download(path: str, url: str):
         tmp_path = target_dir / os.path.basename(url)
 
         # ダウンロード実行
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, timeout=60)
         response.raise_for_status()
         with open(tmp_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -83,39 +83,38 @@ def float_to_timecode(value: float) -> str:
 
 
 
-def adjust_utterance_time(
-        df_utt: pd.DataFrame,
+def adjust_ipu_time(
+        df_ipu: pd.DataFrame,
         df_phon: pd.DataFrame
         ) -> pd.DataFrame:
     """
-    Whisperの時間はファジーなので発話の開始時間を最初の音素の開始時間に、
-    発話の終了時間を最後の音素の終了時間に修正する
+    Whisperの時間はファジーなのでIPUの開始時間を最初の音素の開始時間に、
+    IPUの終了時間を最後の音素の終了時間に修正する
     
     Args:
-        df_utt (pd.DataFrame): 発話のデータフレーム
+        df_ipu (pd.DataFrame): IPUのデータフレーム
         df_phon (pd.DataFrame): 音素のデータフレーム
 
     Returns:
-        df_adjusted (pd.DataFrame): 修正された発話のデータフレーム
+        df_adjusted (pd.DataFrame): 修正されたIPUのデータフレーム
     """
 
-    # 音素の最小・最大時刻を utteranceID ごとに取得
+    if df_phon.empty:
+        return df_ipu.copy()
+
+    # 音素の最小・最大時刻を ipuID ごとに取得
     phon_range = (
-        df_phon.groupby("utteranceID")
+        df_phon.groupby("ipuID")
         .agg(startTime_phon=("startTime", "min"),
         endTime_phon=("endTime", "max"))
         .reset_index()
     )
     
-    df_adjusted = pd.merge(df_utt, phon_range, on="utteranceID", how="left")
+    df_adjusted = pd.merge(df_ipu, phon_range, on="ipuID", how="left")
 
     # 音素の時間に基づいて更新（音素がない場合は元の値を保持）
-    df_adjusted["startTime"] = df_adjusted.apply(
-        lambda r: r["startTime_phon"] if pd.notna(r["startTime_phon"]) else r["startTime"], axis=1
-    )
-    df_adjusted["endTime"] = df_adjusted.apply(
-        lambda r: r["endTime_phon"] if pd.notna(r["endTime_phon"]) else r["endTime"], axis=1
-    )
+    df_adjusted["startTime"] = df_adjusted["startTime_phon"].combine_first(df_adjusted["startTime"])
+    df_adjusted["endTime"] = df_adjusted["endTime_phon"].combine_first(df_adjusted["endTime"])
 
     # 不要な列を削除
     df_adjusted = df_adjusted.drop(columns=["startTime_phon", "endTime_phon"])

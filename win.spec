@@ -15,6 +15,7 @@ for p in site.getsitepackages():
 
 datas = [
     ('asset', 'asset'),
+    ('ffmpeg', 'ffmpeg'),
     ('unidic-csj-202302', 'unidic-csj-202302'),
     (os.path.join(package_path, "pykakasi/data"), 'pykakasi/data'),
     ('phoneme_transition_model.onnx', '.'),

@@ -16,7 +16,7 @@ for p in site.getsitepackages():
 datas = [
     ('asset', 'asset'),
     ('tranosuke', 'tranosuke'),
-    ('/opt/homebrew/bin/ffmpeg', 'ffmpeg'),
+    ('ffmpeg', 'ffmpeg'),
     (os.path.join(package_path, "pykakasi/data"), 'pykakasi/data'),
     (os.path.join(package_path, "altair/vegalite/v5/schema/vega-lite-schema.json"), "altair/vegalite/v5/schema/"),
     (os.path.join(package_path, "streamlit/static"), "streamlit/static"),
