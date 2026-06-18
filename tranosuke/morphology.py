@@ -107,13 +107,24 @@ def _parse_morphemes(text: str, tagger, kakasi) -> list:
     return morphemes
 
 
+def _resolve_mecab_dictionary_path(dic_path: Path) -> Path:
+    if (dic_path / "dicrc").exists():
+        return dic_path
+
+    for child in dic_path.iterdir():
+        if child.is_dir() and (child / "dicrc").exists():
+            return child
+
+    return dic_path
+
+
 def analyze_ipus(df_ipu: pd.DataFrame) -> pd.DataFrame:
     """
     Convert IPU rows into morpheme rows with phoneme strings.
     """
     kakasi = pykakasi.kakasi()
     paths = get_app_paths()
-    dic_path = paths.cache_dir / "unidic-csj-202302"
+    dic_path = _resolve_mecab_dictionary_path(paths.unidic_dir)
     if paths.system == "Windows":
         dic_path = Path(str(dic_path).replace("\\", "/"))
 

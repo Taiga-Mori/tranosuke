@@ -45,9 +45,21 @@ pip install git+https://github.com/DwangoMediaVillage/pydomino
 ```
 
 `requirements.txt` には現行アプリに必要な主要パッケージだけを入れています。  
-初回はモデルや辞書のダウンロードに時間がかかります。
+初回起動時は、必要な辞書・モデル・公式バイナリのダウンロードに時間がかかります。
 
-## 初期設定
+## 初回起動時の自動セットアップ
+
+アプリ起動時に `~/.tranosuke/` を確認し、足りないものだけを自動でダウンロードします。
+
+現在、自動取得するものは次の通りです。
+
+- UniDic-CSJ 辞書
+- `phoneme_transition_model.onnx`
+- ノイズ低減実行時のみ、DeepFilterNet の公式バイナリ
+
+`ffmpeg` はアプリ同梱版があればそれを優先し、なければシステムの `ffmpeg` / `ffprobe` を使います。
+
+## Hugging Face トークン設定
 
 話者分離には Hugging Face のアクセストークンが必要です。
 
@@ -55,23 +67,11 @@ pip install git+https://github.com/DwangoMediaVillage/pydomino
 2. [pyannote/speaker-diarization-community-1](https://hf.co/pyannote/speaker-diarization-community-1) の利用規約に同意
 3. [アクセストークン発行ページ](https://hf.co/settings/tokens) で `Read` 権限のトークンを作成
 
-初期化:
-
-```bash
-python -m tranosuke init
-```
-
-トークン保存:
+CLI でトークン保存:
 
 ```bash
 python -m tranosuke token hf_xxx
 ```
-
-初期化で次を準備します。
-
-- `~/.tranosuke/config.yaml`
-- UniDic-CSJ 辞書
-- `phoneme_transition_model.onnx`
 
 ## GUI の使い方
 
@@ -84,6 +84,8 @@ python app.py
 ```bash
 python -m tranosuke gui
 ```
+
+起動時に必要な辞書とモデルを自動確認し、足りない場合はその場で取得します。
 
 GUI では以下のタブを使えます。
 
@@ -120,7 +122,8 @@ python -m tranosuke convert input.mp4 --no-split-channels
 python -m tranosuke denoise input.wav
 ```
 
-動画や mp3 などを渡した場合は、まず wav に変換してからノイズ低減します。
+動画や mp3 などを渡した場合は、まず 48kHz モノラル wav に変換してからノイズ低減します。  
+この機能を初めて使うときだけ、DeepFilterNet の公式バイナリを自動ダウンロードします。
 
 ### 3. IPU 書き起こし
 
@@ -239,5 +242,5 @@ print(result.phoneme_csv)
 
 - Hugging Face トークンが未設定だと話者分離は実行できません
 - 長い音声や話者数が多い音声は時間がかかります
-- ノイズ低減は `fast-music-remover/MediaProcessor` に依存します
+- ノイズ低減は DeepFilterNet の公式バイナリに依存します
 - 精度は音質、雑音、重なりIPUに大きく左右されます

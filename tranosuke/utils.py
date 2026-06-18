@@ -1,127 +1,103 @@
-from pathlib import Path
-import pandas as pd
-import os
-import requests
+import tarfile
 import zipfile
+import shutil
+from pathlib import Path
+
+import pandas as pd
+import requests
 
 
+DEFAULT_HEADERS = {"User-Agent": "tranosuke"}
 
-def download(path: str, url: str):
-    """
-    指定されたパス（ファイルまたはディレクトリ）が存在しない場合、
-    指定されたURLからダウンロードし、zipなら自動解凍する。
-    Args:
-        path (str): 確認したいファイルまたはディレクトリ
-        url (str): ダウンロード先のリンク
-    """
 
-    path = Path(path).expanduser()
-    target_dir = path.parent
+def download_file(url: str, destination: str | Path) -> Path:
+    """Download a file if it does not already exist."""
+    target = Path(destination).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if target.exists():
+        return target
+
+    response = requests.get(url, stream=True, timeout=120, headers=DEFAULT_HEADERS)
+    response.raise_for_status()
+
+    with open(target, "wb") as file:
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                file.write(chunk)
+
+    return target
+
+
+def download_json(url: str) -> dict:
+    response = requests.get(url, timeout=60, headers=DEFAULT_HEADERS)
+    response.raise_for_status()
+    return response.json()
+
+
+def extract_archive(archive_path: str | Path, destination_dir: str | Path) -> Path:
+    archive = Path(archive_path).expanduser().resolve()
+    target_dir = Path(destination_dir).expanduser().resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    # すでに存在する場合はスキップ
-    if path.exists():
-        print(f"'{path}' は既に存在します。ダウンロードをスキップします。")
+    if zipfile.is_zipfile(archive):
+        with zipfile.ZipFile(archive, "r") as zip_file:
+            zip_file.extractall(target_dir)
+        return target_dir
 
+    if tarfile.is_tarfile(archive):
+        with tarfile.open(archive, "r:*") as tar_file:
+            tar_file.extractall(target_dir)
+        return target_dir
+
+    raise ValueError(f"Unsupported archive format: {archive}")
+
+
+def download_and_extract(url: str, destination_dir: str | Path, archive_name: str | None = None) -> Path:
+    target_dir = Path(destination_dir).expanduser().resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    if any(target_dir.iterdir()):
+        return target_dir
+
+    file_name = archive_name or Path(url).name or "downloaded.archive"
+    archive_path = target_dir.parent / file_name
+    download_file(url, archive_path)
+    if zipfile.is_zipfile(archive_path) or tarfile.is_tarfile(archive_path):
+        extract_archive(archive_path, target_dir)
     else:
-        print(f"'{path}' が存在しません。'{url}' から取得します...")
-
-        # ダウンロード先の一時ファイル
-        tmp_path = target_dir / os.path.basename(url)
-
-        # ダウンロード実行
-        response = requests.get(url, stream=True, timeout=60)
-        response.raise_for_status()
-        with open(tmp_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        print(f"ダウンロード完了: {tmp_path}")
-
-        # zipファイルなら解凍
-        if zipfile.is_zipfile(tmp_path):
-            print(f"zipファイルを '{target_dir / path.name}' に解凍中...")
-            with zipfile.ZipFile(tmp_path, "r") as zip_ref:
-                zip_ref.extractall(target_dir / path.name)
-            print("解凍完了")
-
-            # zip削除（必要に応じて保持したいならコメントアウト）
-            tmp_path.unlink()
-            print(f"一時ファイル '{tmp_path.name}' を削除しました。")
-
-        else:
-            print("zipファイルではありません。ダウンロードのみ完了。")
+        target_path = target_dir / archive_path.name
+        shutil.move(str(archive_path), target_path)
+        return target_dir
+    archive_path.unlink(missing_ok=True)
+    return target_dir
 
 
-
-def float_to_timecode(value: float) -> str:
-    """
-    小数点以下3桁を固定して扱い、
-    6桁のゼロ埋め文字列に変換する。
-
-    例:
-      23.42   -> '023420'
-      125.987 -> '125987'
-      374.700 -> '374700'
-    """
+def float_to_timecode(value: float) -> str | None:
+    """Convert seconds into a zero-padded fixed-width millisecond-ish ID chunk."""
     if value is None:
         return None
 
-    # 小数点以下3桁固定で文字列化（例: 23.42 → '23.420'）
-    s = f"{value:.3f}"
-
-    # 小数点を除去
-    s = s.replace('.', '')
-
-    # 6桁ゼロ埋め or 超過時切り捨て
-    if len(s) < 6:
-        s = s.zfill(6)
-    elif len(s) > 6:
-        s = s[:6]
-
-    return s
+    text = f"{value:.3f}".replace(".", "")
+    if len(text) < 6:
+        return text.zfill(6)
+    if len(text) > 6:
+        return text[:6]
+    return text
 
 
-
-def adjust_ipu_time(
-        df_ipu: pd.DataFrame,
-        df_phon: pd.DataFrame
-        ) -> pd.DataFrame:
-    """
-    Whisperの時間はファジーなのでIPUの開始時間を最初の音素の開始時間に、
-    IPUの終了時間を最後の音素の終了時間に修正する
-    
-    Args:
-        df_ipu (pd.DataFrame): IPUのデータフレーム
-        df_phon (pd.DataFrame): 音素のデータフレーム
-
-    Returns:
-        df_adjusted (pd.DataFrame): 修正されたIPUのデータフレーム
-    """
-
+def adjust_ipu_time(df_ipu: pd.DataFrame, df_phon: pd.DataFrame) -> pd.DataFrame:
+    """Replace rough IPU timings with the first and last aligned phoneme timings."""
     if df_phon.empty:
         return df_ipu.copy()
 
-    # 音素の最小・最大時刻を ipuID ごとに取得
-    phon_range = (
+    phoneme_ranges = (
         df_phon.groupby("ipuID")
-        .agg(startTime_phon=("startTime", "min"),
-        endTime_phon=("endTime", "max"))
+        .agg(startTime_phon=("startTime", "min"), endTime_phon=("endTime", "max"))
         .reset_index()
     )
-    
-    df_adjusted = pd.merge(df_ipu, phon_range, on="ipuID", how="left")
 
-    # 音素の時間に基づいて更新（音素がない場合は元の値を保持）
-    df_adjusted["startTime"] = df_adjusted["startTime_phon"].combine_first(df_adjusted["startTime"])
-    df_adjusted["endTime"] = df_adjusted["endTime_phon"].combine_first(df_adjusted["endTime"])
-
-    # 不要な列を削除
-    df_adjusted = df_adjusted.drop(columns=["startTime_phon", "endTime_phon"])
-
-    return df_adjusted
-
-
-
-if __name__ == '__main__':
-    pass
+    adjusted = pd.merge(df_ipu, phoneme_ranges, on="ipuID", how="left")
+    adjusted["startTime"] = adjusted["startTime_phon"].combine_first(adjusted["startTime"])
+    adjusted["endTime"] = adjusted["endTime_phon"].combine_first(adjusted["endTime"])
+    return adjusted.drop(columns=["startTime_phon", "endTime_phon"])

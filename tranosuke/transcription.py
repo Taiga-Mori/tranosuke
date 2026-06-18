@@ -70,6 +70,13 @@ def _normalize_ipu_text(words: list[str]) -> str:
     return text
 
 
+def _resolve_whisper_device(device: str) -> str:
+    """Map unsupported Torch devices to faster-whisper compatible devices."""
+    if device == "mps":
+        return "cpu"
+    return device
+
+
 def transcribe_ipus(
     audio_path: str | Path,
     model_name: str = "turbo",
@@ -81,20 +88,20 @@ def transcribe_ipus(
     Perform diarization and whisper transcription, then group words into IPUs.
     """
     source = Path(audio_path).expanduser().resolve()
-    wav, sample_rate = torchaudio.load(str(source))
-    if wav.ndim > 1:
-        wav = wav.mean(dim=0, keepdim=True)
-    wav = wav.squeeze(0).numpy()
+    waveform, sample_rate = torchaudio.load(str(source))
+    if waveform.ndim > 1 and waveform.shape[0] > 1:
+        waveform = waveform.mean(dim=0, keepdim=True)
+    wav = waveform.squeeze(0).numpy()
 
     paths = get_app_paths()
-    model = WhisperModel(model_name, device=paths.device)
+    model = WhisperModel(model_name, device=_resolve_whisper_device(paths.device))
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-community-1",
         token=_load_huggingface_token(),
     )
 
     with ProgressHook() as hook:
-        diarization = pipeline(str(source), hook=hook)
+        diarization = pipeline({"waveform": waveform, "sample_rate": sample_rate}, hook=hook)
 
     ipus = []
     max_gap_s = max_pause_ms / 1000.0

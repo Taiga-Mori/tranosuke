@@ -1,5 +1,12 @@
 from tranosuke.alignment import align_phonemes_and_words
-from tranosuke.config import AppPaths, get_app_paths, initialize_app, read_user_config, save_huggingface_token
+from tranosuke.config import (
+    AppPaths,
+    ensure_denoise_runtime,
+    get_app_paths,
+    initialize_app,
+    read_user_config,
+    save_huggingface_token,
+)
 from tranosuke.corpus import build_corpus
 from tranosuke.denoise import denoise_media, denoise_wav
 from tranosuke.luu import build_luus, build_luus_from_word_csv
@@ -18,6 +25,7 @@ __all__ = [
     "convert_media_to_wavs",
     "denoise_media",
     "denoise_wav",
+    "ensure_denoise_runtime",
     "get_app_paths",
     "initialize_app",
     "read_user_config",

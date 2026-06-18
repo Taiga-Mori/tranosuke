@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import streamlit as st
 
 from tranosuke.alignment import align_phonemes_and_words
@@ -11,9 +13,18 @@ from tranosuke.transcription import transcribe_media_to_ipu_csv
 
 
 QUALITY_OPTIONS = {
-    "スピード優先!": {"model_name": "turbo", "beam_size": 5},
-    "クオリティ優先!": {"model_name": "large-v3", "beam_size": 10},
+    "スピード優先": {"model_name": "turbo", "beam_size": 5},
+    "クオリティ優先": {"model_name": "large-v3", "beam_size": 10},
 }
+
+
+def _ensure_startup_assets() -> None:
+    if st.session_state.get("startup_assets_ready"):
+        return
+
+    with st.spinner("初回起動に必要な辞書とモデルを確認しています..."):
+        initialize_app()
+    st.session_state["startup_assets_ready"] = True
 
 
 def _save_token_form() -> None:
@@ -38,7 +49,8 @@ def _conversion_tab() -> None:
 
 
 def _denoise_tab() -> None:
-    st.subheader("2. ノイズを低減")
+    st.subheader("ノイズ低減")
+    st.caption("初回実行時は、公式の DeepFilterNet バイナリを自動ダウンロードします。")
     input_path = st.text_input("入力ファイル", key="denoise_input")
     if st.button("ノイズ低減する", key="denoise_run"):
         output_path = denoise_media(input_path)
@@ -46,7 +58,7 @@ def _denoise_tab() -> None:
 
 
 def _transcription_tab() -> None:
-    st.subheader("3. 話者分離と IPU 書き起こし")
+    st.subheader("話者分離と IPU 書き起こし")
     input_path = st.text_input("入力ファイル", key="transcribe_input")
     quality = st.radio("品質", list(QUALITY_OPTIONS), key="transcribe_quality")
     if st.button("書き起こす", key="transcribe_run"):
@@ -60,7 +72,7 @@ def _transcription_tab() -> None:
 
 
 def _morphology_tab() -> None:
-    st.subheader("4. 形態素解析")
+    st.subheader("形態素解析")
     input_csv = st.text_input("ipu.csv のパス", key="morph_input")
     if st.button("形態素解析する", key="morph_run"):
         csv_path, _ = analyze_ipu_csv(input_csv)
@@ -68,7 +80,7 @@ def _morphology_tab() -> None:
 
 
 def _alignment_tab() -> None:
-    st.subheader("5. 音素・単語アラインメント")
+    st.subheader("音素・単語アラインメント")
     audio_path = st.text_input("wav ファイル", key="align_audio")
     ipu_csv = st.text_input("ipu.csv", key="align_ipu")
     morph_csv = st.text_input("morpheme.csv", key="align_morph")
@@ -85,7 +97,7 @@ def _alignment_tab() -> None:
 
 
 def _luu_tab() -> None:
-    st.subheader("6. LUU 作成")
+    st.subheader("LUU 作成")
     word_csv = st.text_input("word.csv", key="luu_word_csv")
     if st.button("LUU を作成する", key="luu_run"):
         result = build_luus_from_word_csv(word_csv)
@@ -94,7 +106,7 @@ def _luu_tab() -> None:
 
 
 def _corpus_tab() -> None:
-    st.subheader("7. コーパスを一括作成")
+    st.subheader("コーパスを一括作成")
     input_path = st.text_input("入力ファイル", key="corpus_input")
     quality = st.radio("品質", list(QUALITY_OPTIONS), key="corpus_quality")
     use_denoise = st.checkbox("先にノイズ低減を行う", value=False, key="corpus_denoise")
@@ -118,13 +130,23 @@ def _corpus_tab() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="とらのすけ", layout="wide")
-    st.image("asset/tranosuke.png", width=180)
+    icon_path = Path(__file__).resolve().parent.parent / "asset" / "tranosuke.png"
+    st.image(str(icon_path), width=180)
     st.title("とらのすけ")
     st.caption("メディア変換、ノイズ低減、IPU書き起こし、形態素解析、アラインメント、LUU作成、コーパス作成")
 
-    if st.button("初期化する"):
+    try:
+        _ensure_startup_assets()
+        if not st.session_state.get("startup_status_shown"):
+            st.success("起動に必要な辞書とモデルを確認しました。")
+            st.session_state["startup_status_shown"] = True
+    except Exception as error:
+        st.error(f"初期化に失敗しました: {error}")
+        st.stop()
+
+    if st.button("辞書とモデルを再確認する"):
         initialize_app()
-        st.success("初期化が完了しました。")
+        st.success("再確認が完了しました。")
 
     with st.expander("アクセストークン設定"):
         _save_token_form()

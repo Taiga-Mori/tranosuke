@@ -25,7 +25,7 @@ def build_phoneme_alignment(
 ) -> pd.DataFrame:
     source = Path(audio_path).expanduser().resolve()
     audio, sample_rate = sf.read(source)
-    model_path = get_app_paths().cache_dir / "phoneme_transition_model.onnx"
+    model_path = get_app_paths().phoneme_model_path
     aligner = pydomino.Aligner(str(model_path))
 
     phoneme_sequences = (

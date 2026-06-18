@@ -65,6 +65,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.command in {"morph", "align", "luu", "corpus", "gui"}:
+        initialize_app(include_denoise=args.command == "corpus" and getattr(args, "denoise", False))
+
     if args.command == "init":
         paths = initialize_app()
         print(paths.cache_dir)
@@ -87,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "denoise":
+        initialize_app(include_denoise=True)
         print(denoise_media(args.input_path, output_dir=args.output_dir))
         return 0
 
