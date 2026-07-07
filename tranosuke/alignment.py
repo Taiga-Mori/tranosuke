@@ -1,19 +1,50 @@
+import json
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
-import librosa
 import pandas as pd
-import pydomino
 import soundfile as sf
 
 from tranosuke.config import get_app_paths
 from tranosuke.utils import adjust_ipu_time, float_to_timecode
 
 
-def _align_phoneme_sequence(audio_segment, sample_rate: int, phoneme_sequence: str, iterations: int, aligner) -> list:
-    if audio_segment.ndim > 1:
-        audio_segment = audio_segment.mean(axis=1)
-    resampled = librosa.resample(audio_segment.astype("float32"), orig_sr=sample_rate, target_sr=16000)
-    alignment = aligner.align(resampled, phoneme_sequence, iterations)
+def _align_phoneme_sequence(
+    audio_segment,
+    sample_rate: int,
+    phoneme_sequence: str,
+    iterations: int,
+    model_path: Path,
+) -> list:
+    worker_path = Path(__file__).with_name("alignment_worker.py")
+    with tempfile.TemporaryDirectory(prefix="tranosuke_align_") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        request_path = tmp_path / "request.json"
+        segment_path = tmp_path / "segment.wav"
+        output_path = tmp_path / "output.json"
+        request_path.write_text(
+            json.dumps(
+                {
+                    "model_path": str(model_path),
+                    "phoneme_sequence": phoneme_sequence,
+                    "iterations": iterations,
+                }
+            )
+        )
+        sf.write(segment_path, audio_segment, sample_rate)
+        result = subprocess.run(
+            [sys.executable, str(worker_path), str(request_path), str(segment_path), str(output_path)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "pydomino alignment subprocess failed "
+                f"with code {result.returncode}: {result.stderr or result.stdout}"
+            )
+        alignment = json.loads(output_path.read_text())
     return [item for item in alignment if item[-1] != "pau"]
 
 
@@ -22,18 +53,18 @@ def build_phoneme_alignment(
     df_ipu: pd.DataFrame,
     df_morph: pd.DataFrame,
     iterations: int = 3,
+    alignment_buffer_s: float = 0.1,
 ) -> pd.DataFrame:
     source = Path(audio_path).expanduser().resolve()
     audio, sample_rate = sf.read(source)
     model_path = get_app_paths().phoneme_model_path
-    aligner = pydomino.Aligner(str(model_path))
-
     phoneme_sequences = (
         df_morph.groupby("ipuID")["phonemes"].apply(lambda values: " ".join(values)).to_dict()
     )
+    sorted_ipus = df_ipu.sort_values(["speaker", "startTime", "endTime"]).reset_index(drop=True)
 
     rows = []
-    for _, ipu_row in df_ipu.iterrows():
+    for _, ipu_row in sorted_ipus.iterrows():
         if pd.isna(ipu_row["ipu"]):
             continue
 
@@ -42,23 +73,47 @@ def build_phoneme_alignment(
         if not phoneme_sequence:
             continue
 
-        start_delay = 0.0
-        end_buffer = 0.2
-        start_sample = max(int((ipu_row["startTime"] + start_delay) * sample_rate), 0)
-        end_sample = min(int((ipu_row["endTime"] + end_buffer) * sample_rate), len(audio))
-        if end_sample <= start_sample:
-            continue
+        ipu_start = max(float(ipu_row["startTime"]), 0.0)
+        ipu_end = min(float(ipu_row["endTime"]), len(audio) / sample_rate)
+        previous_ipus = sorted_ipus[sorted_ipus["endTime"] <= ipu_start]
+        next_ipus = sorted_ipus[sorted_ipus["startTime"] >= ipu_end]
+        previous_boundary = float(previous_ipus["endTime"].max()) if not previous_ipus.empty else 0.0
+        next_boundary = float(next_ipus["startTime"].min()) if not next_ipus.empty else len(audio) / sample_rate
+        max_left_buffer = max(ipu_start - previous_boundary, 0.0)
+        max_right_buffer = max(next_boundary - ipu_end, 0.0)
+        max_available_buffer = max(max_left_buffer, max_right_buffer, alignment_buffer_s)
+        buffer_attempts = [alignment_buffer_s]
+        for multiplier in [2.0, 4.0]:
+            buffer_attempts.append(alignment_buffer_s * multiplier)
+        buffer_attempts.append(max_available_buffer)
+        buffer_attempts = sorted({round(max(buffer, 0.0), 3) for buffer in buffer_attempts})
 
-        try:
-            phonemes = _align_phoneme_sequence(
-                audio[start_sample:end_sample],
-                sample_rate,
-                phoneme_sequence,
-                iterations,
-                aligner,
-            )
-        except Exception as error:
-            print(error)
+        phonemes = None
+        alignment_start = ipu_start
+        for buffer_s in buffer_attempts:
+            attempt_start = max(ipu_start - buffer_s, previous_boundary, 0.0)
+            attempt_end = min(ipu_end + buffer_s, next_boundary, len(audio) / sample_rate)
+            start_sample = max(int(attempt_start * sample_rate), 0)
+            end_sample = min(int(attempt_end * sample_rate), len(audio))
+            if end_sample <= start_sample:
+                continue
+
+            try:
+                phonemes = _align_phoneme_sequence(
+                    audio[start_sample:end_sample],
+                    sample_rate,
+                    phoneme_sequence,
+                    iterations,
+                    model_path,
+                )
+                alignment_start = attempt_start
+                if buffer_s != alignment_buffer_s:
+                    print(f"alignment retry succeeded: {ipu_id} buffer={buffer_s:.3f}s")
+                break
+            except Exception as error:
+                print(f"alignment failed: {ipu_id} buffer={buffer_s:.3f}s {error}")
+
+        if phonemes is None:
             continue
 
         for start_time, end_time, phoneme in phonemes:
@@ -67,8 +122,8 @@ def build_phoneme_alignment(
                     ipu_row["filename"],
                     ipu_row["speaker"],
                     ipu_id,
-                    round(float(start_time) + ipu_row["startTime"] + start_delay, 4),
-                    round(float(end_time) + ipu_row["startTime"] + start_delay, 4),
+                    round(float(start_time) + alignment_start, 4),
+                    round(float(end_time) + alignment_start, 4),
                     phoneme,
                 ]
             )
@@ -177,11 +232,14 @@ def align_phonemes_and_words(
     df_morph: pd.DataFrame,
     output_dir: str | Path | None = None,
     iterations: int = 3,
+    alignment_buffer_s: float = 0.1,
 ) -> dict[str, pd.DataFrame | Path]:
     target_dir = Path(output_dir).expanduser().resolve() if output_dir else Path(audio_path).expanduser().resolve().parent
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    df_phon = build_phoneme_alignment(audio_path, df_ipu, df_morph, iterations=iterations)
+    df_phon = build_phoneme_alignment(
+        audio_path, df_ipu, df_morph, iterations=iterations, alignment_buffer_s=alignment_buffer_s
+    )
     df_word = build_word_alignment(df_morph[df_morph["orth"] != "¥"].copy(), df_phon)
     df_word_to_ipu = build_word_to_ipu(df_word)
     df_ipu_adjusted = adjust_ipu_time(df_ipu, df_phon)

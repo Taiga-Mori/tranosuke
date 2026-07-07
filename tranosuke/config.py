@@ -41,11 +41,48 @@ def detect_device() -> str:
     except ModuleNotFoundError:
         return "cpu"
 
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
+    try:
+        if torch.cuda.is_available():
+            torch.empty(1, device="cuda")
+            return "cuda"
+    except Exception:
+        pass
+
+    try:
+        if torch.backends.mps.is_available():
+            torch.empty(1, device="mps")
+            return "mps"
+    except Exception:
+        pass
+
     return "cpu"
+
+
+def list_cuda_devices() -> list[dict[str, int | str | None]]:
+    try:
+        import torch
+    except ModuleNotFoundError:
+        return []
+
+    try:
+        if not torch.cuda.is_available():
+            return []
+
+        devices = []
+        for index in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(index)
+            free_memory, total_memory = torch.cuda.mem_get_info(index)
+            devices.append(
+                {
+                    "index": index,
+                    "name": props.name,
+                    "free_gb": round(free_memory / 1024**3, 1),
+                    "total_gb": round(total_memory / 1024**3, 1),
+                }
+            )
+        return devices
+    except Exception:
+        return []
 
 
 def get_base_dir() -> Path:

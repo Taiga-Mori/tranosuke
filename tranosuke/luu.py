@@ -25,6 +25,18 @@ LOW_INDEPENDENCE_ENDINGS = {
 }
 END_PARTICLES = {"ね", "よ", "か", "な", "の", "さ", "じゃん", "っけ", "もん", "かしら", "わ", "や", "ん", "ぜ", "ぞ", "け"}
 LEXICAL_AIZUCHI = {"そうそう", "そうか", "なるほど", "まあね", "ね"}
+SENTENCE_FINAL_SUFFIXES = (
+    "ですね",
+    "ですよ",
+    "ですよね",
+    "ですか",
+    "でしょう",
+    "でしょうね",
+    "ますね",
+    "ました",
+    "ましたね",
+    "じゃないですか",
+)
 
 
 def _join_surface(words: pd.DataFrame) -> str:
@@ -49,29 +61,32 @@ def _is_interjection_only(ipu_words: pd.DataFrame) -> bool:
     return all(word in INTERJECTION_WORDS for word in orths)
 
 
-def _is_explicit_sentence_final(ipu_words: pd.DataFrame) -> bool:
-    if ipu_words.empty:
+def _is_explicit_sentence_final(words: pd.DataFrame, next_words: pd.DataFrame | None = None) -> bool:
+    if words.empty:
         return False
 
-    surface = _join_surface(ipu_words)
-    last = ipu_words.iloc[-1]
+    surface = _join_surface(words)
+    last = words.iloc[-1]
     last_orth = _normalize(last["orth"])
     last_pos = _normalize(last["pos"])
     last_pos1 = _normalize(last["pos1"])
+    next_orth = "" if next_words is None or next_words.empty else _normalize(next_words.iloc[0]["orth"])
 
     if surface in LEXICAL_AIZUCHI:
-        return True
-    if last_pos == "助動詞":
         return True
     if last_orth in END_PARTICLES:
         return True
     if last_pos == "助詞" and last_pos1 == "終助詞":
         return True
-    if last_pos in {"名詞", "副詞"} and len(ipu_words) == 1:
+    if any(surface.endswith(suffix) for suffix in SENTENCE_FINAL_SUFFIXES):
+        return True
+    if last_pos == "助動詞" and next_orth not in END_PARTICLES | HIGH_INDEPENDENCE_ENDINGS | LOW_INDEPENDENCE_ENDINGS:
+        return True
+    if last_pos in {"名詞", "副詞"} and len(words) == 1 and next_orth in {"", "あの", "えっと", "えーと"}:
         return True
 
-    if len(ipu_words) >= 2:
-        prev = ipu_words.iloc[-2]
+    if len(words) >= 2:
+        prev = words.iloc[-2]
         prev_pos = _normalize(prev["pos"])
         if last_orth in END_PARTICLES and prev_pos in {"動詞", "形容詞", "助動詞", "名詞", "副詞"}:
             return True
@@ -136,7 +151,7 @@ def _decide_boundary(
         return True, "L_DISCOURSE_TOPIC"
     if _is_summary_intro(next_words):
         return True, "L_DISCOURSE_SUMMARY"
-    if _is_explicit_sentence_final(current_words):
+    if _is_explicit_sentence_final(current_words, next_words):
         return True, "L_SYNTACTIC_FINAL"
     if speaker_changed:
         return True, "L_INTERACTION_TURN"
@@ -146,6 +161,9 @@ def _decide_boundary(
 def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Build heuristic LUUs from word timing and part-of-speech information.
+
+    LUU boundaries are evaluated at word positions, not only at IPU boundaries,
+    because sentence-final expressions can occur inside a single IPU.
     """
     if df_word.empty:
         empty_luu = pd.DataFrame(
@@ -157,38 +175,23 @@ def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         return empty_luu, empty_word_map
 
     df_word_sorted = df_word.sort_values(["startTime", "endTime", "wordID"]).reset_index(drop=True)
-    df_ipu_summary = _summarize_ipus_from_words(df_word_sorted)
 
     luu_rows = []
     word2luu_rows = []
-    current_ipu_ids: list[str] = []
-    current_word_rows: list[pd.DataFrame] = []
-    current_text_parts: list[str] = []
+    current_word_rows: list[pd.Series] = []
 
-    word_groups = {ipu_id: group.copy() for ipu_id, group in df_word_sorted.groupby("ipuID", sort=False)}
+    def flush(boundary_type: str) -> None:
+        if not current_word_rows:
+            return
 
-    for index, ipu_summary in df_ipu_summary.iterrows():
-        ipu_id = ipu_summary["ipuID"]
-        current_words = word_groups[ipu_id]
-        current_ipu_ids.append(ipu_id)
-        current_word_rows.append(current_words)
-        current_text_parts.append(_normalize(ipu_summary["ipu"]))
-
-        next_summary = df_ipu_summary.iloc[index + 1] if index + 1 < len(df_ipu_summary) else None
-        next_words = word_groups[next_summary["ipuID"]] if next_summary is not None else None
-        should_close, boundary_type = _decide_boundary(current_words, next_words, ipu_summary, next_summary)
-
-        if not should_close:
-            continue
-
-        luu_words = pd.concat(current_word_rows, ignore_index=True)
+        luu_words = pd.DataFrame(current_word_rows)
         speaker = _normalize(luu_words.iloc[0]["speaker"])
         valid_starts = luu_words["startTime"].dropna()
         valid_ends = luu_words["endTime"].dropna()
         luu_start = valid_starts.min() if not valid_starts.empty else pd.NA
         luu_end = valid_ends.max() if not valid_ends.empty else pd.NA
         luu_id = f"{float_to_timecode(luu_start)}{speaker}" if pd.notna(luu_start) else f"unknown{speaker}{len(luu_rows)+1}"
-        luu_text = "".join(part for part in current_text_parts if part)
+        luu_text = _join_surface(luu_words)
 
         luu_rows.append(
             {
@@ -200,7 +203,7 @@ def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                 "endTime": luu_end,
                 "luu": luu_text,
                 "boundaryType": boundary_type,
-                "ipuCount": len(current_ipu_ids),
+                "ipuCount": luu_words["ipuID"].nunique(),
                 "wordCount": len(luu_words),
             }
         )
@@ -221,14 +224,26 @@ def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                 }
             )
 
-        current_ipu_ids = []
+    for index, word_row in df_word_sorted.iterrows():
+        current_word_rows.append(word_row)
+        current_words = pd.DataFrame(current_word_rows)
+        next_word = df_word_sorted.iloc[[index + 1]] if index + 1 < len(df_word_sorted) else None
+        current_summary = pd.Series({"speaker": current_words.iloc[-1]["speaker"]})
+        next_summary = None if next_word is None else pd.Series({"speaker": next_word.iloc[0]["speaker"]})
+        should_close, boundary_type = _decide_boundary(current_words, next_word, current_summary, next_summary)
+
+        if not should_close:
+            continue
+
+        flush(boundary_type)
         current_word_rows = []
-        current_text_parts = []
+
+    if current_word_rows:
+        flush("END")
 
     df_luu = pd.DataFrame(luu_rows)
     df_word2luu = pd.DataFrame(word2luu_rows)
     return df_luu, df_word2luu
-
 
 def build_luus_from_word_csv(input_csv_path: str | Path, output_dir: str | Path | None = None) -> dict[str, pd.DataFrame | Path]:
     source = Path(input_csv_path).expanduser().resolve()

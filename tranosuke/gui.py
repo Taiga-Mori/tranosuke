@@ -1,15 +1,21 @@
+import faulthandler
+import sys
+import traceback
 from pathlib import Path
 
 import streamlit as st
 
 from tranosuke.alignment import align_phonemes_and_words
-from tranosuke.config import initialize_app, read_user_config, save_huggingface_token
+from tranosuke.config import initialize_app, list_cuda_devices, read_user_config, save_huggingface_token
 from tranosuke.corpus import build_corpus
 from tranosuke.denoise import denoise_media
 from tranosuke.luu import build_luus_from_word_csv
 from tranosuke.media import convert_media_to_wavs
 from tranosuke.morphology import analyze_ipu_csv
 from tranosuke.transcription import transcribe_media_to_ipu_csv
+
+
+_FAULT_LOG_FILE = None
 
 
 QUALITY_OPTIONS = {
@@ -33,6 +39,64 @@ def _save_token_form() -> None:
     if st.button("トークンを保存"):
         save_huggingface_token(token)
         st.success("保存しました。")
+
+
+def _device_selector(key: str) -> tuple[str | None, int | None]:
+    devices = list_cuda_devices()
+    options = ["自動"]
+    option_values: dict[str, tuple[str | None, int | None]] = {"自動": (None, None)}
+
+    for device in devices:
+        label = (
+            f"GPU {device['index']}: {device['name']} "
+            f"({device['free_gb']}GB / {device['total_gb']}GB 空き)"
+        )
+        options.append(label)
+        option_values[label] = ("cuda", int(device["index"]))
+
+    options.append("CPU")
+    option_values["CPU"] = ("cpu", None)
+
+    selected = st.selectbox("処理デバイス", options, key=key)
+    return option_values[selected]
+
+
+def _console_progress(value: float, message: str) -> None:
+    width = 32
+    normalized = max(0.0, min(1.0, value))
+    filled = int(width * normalized)
+    bar = "#" * filled + "-" * (width - filled)
+    percent = int(normalized * 100)
+    sys.stderr.write(f"\r[{bar}] {percent:3d}% {message}")
+    sys.stderr.flush()
+    if value >= 1.0:
+        sys.stderr.write("\n")
+
+
+def _streamlit_progress() -> tuple[object, object, object]:
+    progress_bar = st.progress(0)
+    status = st.empty()
+
+    def update(value: float, message: str) -> None:
+        progress_bar.progress(max(0, min(100, int(value * 100))))
+        status.write(message)
+        _console_progress(value, message)
+
+    return update, progress_bar, status
+
+
+def _enable_fault_log() -> None:
+    global _FAULT_LOG_FILE
+    if _FAULT_LOG_FILE is not None:
+        return
+    log_path = Path("/tmp/tranosuke_streamlit_fault.log")
+    _FAULT_LOG_FILE = log_path.open("a", encoding="utf-8")
+    faulthandler.enable(file=_FAULT_LOG_FILE, all_threads=True)
+
+
+def _show_error(error: Exception) -> None:
+    st.error(f"処理中にエラーが発生しました: {error}")
+    st.code("".join(traceback.format_exception(type(error), error, error.__traceback__)))
 
 
 def _conversion_tab() -> None:
@@ -61,12 +125,35 @@ def _transcription_tab() -> None:
     st.subheader("話者分離と IPU 書き起こし")
     input_path = st.text_input("入力ファイル", key="transcribe_input")
     quality = st.radio("品質", list(QUALITY_OPTIONS), key="transcribe_quality")
+    segment_buffer_s = st.number_input(
+        "話者区間の前後バッファ 秒",
+        min_value=0.0,
+        max_value=5.0,
+        value=0.1,
+        step=0.1,
+        key="transcribe_segment_buffer",
+    )
+    pause_threshold_s = st.number_input(
+        "無音分割閾値 秒",
+        min_value=0.01,
+        max_value=5.0,
+        value=0.2,
+        step=0.01,
+        key="transcribe_pause_threshold",
+    )
+    device, device_index = _device_selector("transcribe_device")
     if st.button("書き起こす", key="transcribe_run"):
         options = QUALITY_OPTIONS[quality]
+        progress_callback, _, _ = _streamlit_progress()
         csv_path, _ = transcribe_media_to_ipu_csv(
             input_path,
             model_name=options["model_name"],
             beam_size=options["beam_size"],
+            pause_threshold_ms=int(pause_threshold_s * 1000),
+            device=device,
+            device_index=device_index,
+            segment_buffer_s=segment_buffer_s,
+            progress_callback=progress_callback,
         )
         st.success(f"IPU 書き起こしを保存しました: {csv_path}")
 
@@ -84,12 +171,20 @@ def _alignment_tab() -> None:
     audio_path = st.text_input("wav ファイル", key="align_audio")
     ipu_csv = st.text_input("ipu.csv", key="align_ipu")
     morph_csv = st.text_input("morpheme.csv", key="align_morph")
+    alignment_buffer_s = st.number_input(
+        "アラインメント前後バッファ 秒",
+        min_value=0.0,
+        max_value=5.0,
+        value=0.1,
+        step=0.1,
+        key="align_buffer",
+    )
     if st.button("アラインメントする", key="align_run"):
         import pandas as pd
 
         df_ipu = pd.read_csv(ipu_csv)
         df_morph = pd.read_csv(morph_csv)
-        result = align_phonemes_and_words(audio_path, df_ipu, df_morph)
+        result = align_phonemes_and_words(audio_path, df_ipu, df_morph, alignment_buffer_s=alignment_buffer_s)
         st.success(f"phoneme.csv: {result['phoneme_csv']}")
         st.success(f"word.csv: {result['word_csv']}")
         st.success(f"word2ipu.csv: {result['word2ipu_csv']}")
@@ -110,14 +205,41 @@ def _corpus_tab() -> None:
     input_path = st.text_input("入力ファイル", key="corpus_input")
     quality = st.radio("品質", list(QUALITY_OPTIONS), key="corpus_quality")
     use_denoise = st.checkbox("先にノイズ低減を行う", value=False, key="corpus_denoise")
+    segment_buffer_s = st.number_input(
+        "話者区間の前後バッファ 秒",
+        min_value=0.0,
+        max_value=5.0,
+        value=0.1,
+        step=0.1,
+        key="corpus_segment_buffer",
+    )
+    pause_threshold_s = st.number_input(
+        "無音分割閾値 秒",
+        min_value=0.01,
+        max_value=5.0,
+        value=0.2,
+        step=0.01,
+        key="corpus_pause_threshold",
+    )
+    device, device_index = _device_selector("corpus_device")
     if st.button("コーパスを作成", key="corpus_run"):
         options = QUALITY_OPTIONS[quality]
-        result = build_corpus(
-            input_path,
-            use_denoise=use_denoise,
-            model_name=options["model_name"],
-            beam_size=options["beam_size"],
-        )
+        progress_callback, _, _ = _streamlit_progress()
+        try:
+            result = build_corpus(
+                input_path,
+                use_denoise=use_denoise,
+                model_name=options["model_name"],
+                beam_size=options["beam_size"],
+                pause_threshold_ms=int(pause_threshold_s * 1000),
+                device=device,
+                device_index=device_index,
+                segment_buffer_s=segment_buffer_s,
+                progress_callback=progress_callback,
+            )
+        except Exception as error:
+            _show_error(error)
+            return
         st.success(f"作成先: {result.media.mixed_mono_wav.parent}")
         st.write(f"ipu.csv: {result.ipu_csv}")
         st.write(f"morpheme.csv: {result.morpheme_csv}")
@@ -129,6 +251,7 @@ def _corpus_tab() -> None:
 
 
 def main() -> None:
+    _enable_fault_log()
     st.set_page_config(page_title="とらのすけ", layout="wide")
     icon_path = Path(__file__).resolve().parent.parent / "asset" / "tranosuke.png"
     st.image(str(icon_path), width=180)

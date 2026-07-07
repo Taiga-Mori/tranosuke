@@ -91,8 +91,6 @@ def _parse_morphemes(text: str, tagger, kakasi) -> list:
             phonemes = roman_to_phonemes(kana_to_roman(morpheme[-1], kakasi))
             if re.search(r"[^A-Za-z ]", phonemes):
                 phonemes = ""
-            if morpheme[0] == "¥":
-                phonemes = "pau"
 
             morpheme.append(phonemes)
             morphemes.append(morpheme)
@@ -128,7 +126,7 @@ def analyze_ipus(df_ipu: pd.DataFrame) -> pd.DataFrame:
     if paths.system == "Windows":
         dic_path = Path(str(dic_path).replace("\\", "/"))
 
-    tagger = MeCab.Tagger(f"-d {dic_path}")
+    tagger = MeCab.Tagger(f"-r /dev/null -d {dic_path}")
     tagger.parse("")
 
     rows = []

@@ -12,6 +12,17 @@ from tranosuke.morphology import analyze_ipu_csv
 from tranosuke.transcription import transcribe_media_to_ipu_csv
 
 
+def _console_progress(value: float, message: str) -> None:
+    width = 32
+    filled = int(width * max(0.0, min(1.0, value)))
+    bar = "#" * filled + "-" * (width - filled)
+    percent = int(max(0.0, min(1.0, value)) * 100)
+    sys.stderr.write(f"\r[{bar}] {percent:3d}% {message}")
+    sys.stderr.flush()
+    if value >= 1.0:
+        sys.stderr.write("\n")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tranosuke")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -35,6 +46,8 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe_parser.add_argument("--output-dir")
     transcribe_parser.add_argument("--model-name", default="turbo")
     transcribe_parser.add_argument("--beam-size", type=int, default=5)
+    transcribe_parser.add_argument("--pause-threshold-ms", type=int, default=200)
+    transcribe_parser.add_argument("--segment-buffer", type=float, default=0.1)
 
     morph_parser = subparsers.add_parser("morph")
     morph_parser.add_argument("input_csv")
@@ -45,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     align_parser.add_argument("ipu_csv")
     align_parser.add_argument("morpheme_csv")
     align_parser.add_argument("--output-dir")
+    align_parser.add_argument("--alignment-buffer", type=float, default=0.1)
 
     luu_parser = subparsers.add_parser("luu")
     luu_parser.add_argument("word_csv")
@@ -55,6 +69,8 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_parser.add_argument("--output-dir")
     corpus_parser.add_argument("--model-name", default="turbo")
     corpus_parser.add_argument("--beam-size", type=int, default=5)
+    corpus_parser.add_argument("--pause-threshold-ms", type=int, default=200)
+    corpus_parser.add_argument("--segment-buffer", type=float, default=0.1)
     corpus_parser.add_argument("--denoise", action="store_true")
 
     subparsers.add_parser("gui")
@@ -100,6 +116,9 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             model_name=args.model_name,
             beam_size=args.beam_size,
+            pause_threshold_ms=args.pause_threshold_ms,
+            segment_buffer_s=args.segment_buffer,
+            progress_callback=_console_progress,
         )
         print(csv_path)
         return 0
@@ -114,7 +133,13 @@ def main(argv: list[str] | None = None) -> int:
 
         df_ipu = pd.read_csv(args.ipu_csv)
         df_morph = pd.read_csv(args.morpheme_csv)
-        result = align_phonemes_and_words(args.audio_path, df_ipu, df_morph, output_dir=args.output_dir)
+        result = align_phonemes_and_words(
+            args.audio_path,
+            df_ipu,
+            df_morph,
+            output_dir=args.output_dir,
+            alignment_buffer_s=args.alignment_buffer,
+        )
         print(result["phoneme_csv"])
         print(result["word_csv"])
         print(result["word2ipu_csv"])
@@ -134,6 +159,9 @@ def main(argv: list[str] | None = None) -> int:
             use_denoise=args.denoise,
             model_name=args.model_name,
             beam_size=args.beam_size,
+            pause_threshold_ms=args.pause_threshold_ms,
+            segment_buffer_s=args.segment_buffer,
+            progress_callback=_console_progress,
         )
         print(result.ipu_csv)
         print(result.morpheme_csv)
