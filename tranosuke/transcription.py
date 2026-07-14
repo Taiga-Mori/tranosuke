@@ -418,10 +418,10 @@ def transcribe_ipus(
                 "filename": source.stem,
                 "speaker": speaker,
                 "tier": f"IPU_{speaker}",
-                "ipuID": f"{float_to_timecode(speech_start)}{speaker}",
+                "IPUID": f"{float_to_timecode(speech_start)}{speaker}",
                 "startTime": round(speech_start, 3),
                 "endTime": round(speech_end, 3),
-                "ipu": text,
+                "IPU": text,
             }
         )
 
@@ -447,7 +447,7 @@ def transcribe_media_to_ipu_csv(
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[Path, pd.DataFrame]:
     """
-    Convert media to wav if needed, transcribe it, and save ipu.csv.
+    Convert media to wav if needed, transcribe it, and save IPU.csv.
     """
     source = Path(input_path).expanduser().resolve()
     _report_progress(progress_callback, 0.0, "wavへ変換しています")
@@ -466,7 +466,7 @@ def transcribe_media_to_ipu_csv(
         segment_buffer_s=segment_buffer_s,
         progress_callback=transcribe_progress,
     )
-    csv_path = conversion.mixed_mono_wav.parent / "ipu.csv"
+    csv_path = conversion.mixed_mono_wav.parent / "IPU.csv"
     _report_progress(progress_callback, 0.98, "CSVへ保存しています")
     df_ipu.to_csv(csv_path, encoding="utf-8_sig", index=False)
     _report_progress(progress_callback, 1.0, "IPU書き起こしCSVを保存しました")

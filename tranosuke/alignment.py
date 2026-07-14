@@ -8,7 +8,7 @@ import pandas as pd
 import soundfile as sf
 
 from tranosuke.config import get_app_paths
-from tranosuke.utils import adjust_ipu_time, float_to_timecode
+from tranosuke.utils import float_to_timecode
 
 
 def _align_phoneme_sequence(
@@ -59,16 +59,16 @@ def build_phoneme_alignment(
     audio, sample_rate = sf.read(source)
     model_path = get_app_paths().phoneme_model_path
     phoneme_sequences = (
-        df_morph.groupby("ipuID")["phonemes"].apply(lambda values: " ".join(values)).to_dict()
+        df_morph.groupby("IPUID")["phonemes"].apply(lambda values: " ".join(values)).to_dict()
     )
     sorted_ipus = df_ipu.sort_values(["speaker", "startTime", "endTime"]).reset_index(drop=True)
 
     rows = []
     for _, ipu_row in sorted_ipus.iterrows():
-        if pd.isna(ipu_row["ipu"]):
+        if pd.isna(ipu_row["IPU"]):
             continue
 
-        ipu_id = ipu_row["ipuID"]
+        ipu_id = ipu_row["IPUID"]
         phoneme_sequence = phoneme_sequences.get(ipu_id, "").strip()
         if not phoneme_sequence:
             continue
@@ -130,29 +130,62 @@ def build_phoneme_alignment(
 
     df_phon = pd.DataFrame(
         rows,
-        columns=["filename", "speaker", "ipuID", "startTime", "endTime", "phoneme"],
+        columns=["filename", "speaker", "IPUID", "startTime", "endTime", "phoneme"],
     )
     if df_phon.empty:
         return pd.DataFrame(
-            columns=["filename", "speaker", "tier", "ipuID", "phonemeID", "startTime", "endTime", "phoneme"]
+            columns=["filename", "speaker", "tier", "IPUID", "phonemeID", "startTime", "endTime", "phoneme"]
         )
 
     df_phon["timestamp"] = df_phon["startTime"].apply(float_to_timecode)
     df_phon["phonemeID"] = df_phon["timestamp"].astype(str) + df_phon["speaker"].astype(str)
     df_phon["tier"] = "Phoneme_" + df_phon["speaker"].astype(str)
     return df_phon[
-        ["filename", "speaker", "tier", "ipuID", "phonemeID", "startTime", "endTime", "phoneme"]
+        ["filename", "speaker", "tier", "IPUID", "phonemeID", "startTime", "endTime", "phoneme"]
     ]
+
+
+def _force_group_edges_to_ipu_boundaries(
+    df_items: pd.DataFrame,
+    df_ipu: pd.DataFrame,
+    id_column: str,
+) -> pd.DataFrame:
+    """Force first/last item times in each IPU to match the IPU boundary."""
+    if df_items.empty:
+        return df_items.copy()
+
+    adjusted = df_items.copy()
+    ipu_boundaries = df_ipu.set_index("IPUID")[["startTime", "endTime"]].to_dict("index")
+
+    for ipu_id, group in adjusted.groupby("IPUID", sort=False):
+        boundaries = ipu_boundaries.get(ipu_id)
+        if boundaries is None:
+            continue
+
+        timed_group = group.dropna(subset=["startTime", "endTime"]).sort_values(["startTime", "endTime", id_column])
+        if timed_group.empty:
+            continue
+
+        first_index = timed_group.index[0]
+        last_index = timed_group.index[-1]
+        adjusted.loc[first_index, "startTime"] = float(boundaries["startTime"])
+        adjusted.loc[last_index, "endTime"] = float(boundaries["endTime"])
+
+    adjusted["timestamp"] = adjusted["startTime"].apply(float_to_timecode)
+    adjusted[id_column] = adjusted["timestamp"].astype(str) + adjusted["speaker"].astype(str)
+    if "timestamp" not in df_items.columns:
+        adjusted = adjusted.drop(columns=["timestamp"])
+    return adjusted
 
 
 def build_word_alignment(df_morph: pd.DataFrame, df_phon: pd.DataFrame) -> pd.DataFrame:
     rows = []
     phoneme_groups = {
         ipu_id: group.sort_values("startTime").reset_index(drop=True)
-        for ipu_id, group in df_phon.groupby("ipuID")
+        for ipu_id, group in df_phon.groupby("IPUID")
     }
 
-    for ipu_id, morph_group in df_morph.groupby("ipuID"):
+    for ipu_id, morph_group in df_morph.groupby("IPUID"):
         phoneme_group = phoneme_groups.get(ipu_id)
         if phoneme_group is None or phoneme_group.empty:
             continue
@@ -183,8 +216,8 @@ def build_word_alignment(df_morph: pd.DataFrame, df_phon: pd.DataFrame) -> pd.Da
                 continue
             rows.append([ipu_id, word_start, word_end, word_row["nth"]])
 
-    df_word_timing = pd.DataFrame(rows, columns=["ipuID", "startTime", "endTime", "nth"])
-    df_word = pd.merge(df_morph, df_word_timing, on=["ipuID", "nth"], how="left")
+    df_word_timing = pd.DataFrame(rows, columns=["IPUID", "startTime", "endTime", "nth"])
+    df_word = pd.merge(df_morph, df_word_timing, on=["IPUID", "nth"], how="left")
     df_word["timestamp"] = df_word["startTime"].apply(float_to_timecode)
     df_word["wordID"] = df_word["timestamp"].astype(str) + df_word["speaker"].astype(str)
     df_word["tier"] = "Word_" + df_word["speaker"].astype(str)
@@ -193,7 +226,7 @@ def build_word_alignment(df_morph: pd.DataFrame, df_phon: pd.DataFrame) -> pd.Da
             "filename",
             "speaker",
             "tier",
-            "ipuID",
+            "IPUID",
             "wordID",
             "startTime",
             "endTime",
@@ -215,15 +248,23 @@ def build_word_alignment(df_morph: pd.DataFrame, df_phon: pd.DataFrame) -> pd.Da
 
 
 def build_word_to_ipu(df_word: pd.DataFrame) -> pd.DataFrame:
-    """Build an explicit mapping table between words and IPUs."""
+    """Build a compact mapping table between words and IPUs."""
     if df_word.empty:
-        return pd.DataFrame(
-            columns=["filename", "speaker", "wordID", "ipuID", "startTime", "endTime", "orth", "nth", "len"]
-        )
+        return pd.DataFrame(columns=["filename", "wordID", "IPUID", "nth", "len"])
 
-    return df_word[
-        ["filename", "speaker", "wordID", "ipuID", "startTime", "endTime", "orth", "nth", "len"]
-    ].copy()
+    mapping = df_word[["filename", "wordID", "IPUID", "nth", "len"]].copy()
+    return mapping
+
+
+def build_phoneme_to_ipu(df_phon: pd.DataFrame) -> pd.DataFrame:
+    """Build a compact mapping table between phonemes and IPUs."""
+    if df_phon.empty:
+        return pd.DataFrame(columns=["filename", "phonemeID", "IPUID", "nth", "len"])
+
+    mapping = df_phon[["filename", "phonemeID", "IPUID"]].copy()
+    mapping["nth"] = mapping.groupby("IPUID").cumcount() + 1
+    mapping["len"] = mapping.groupby("IPUID")["phonemeID"].transform("size")
+    return mapping
 
 
 def align_phonemes_and_words(
@@ -240,28 +281,39 @@ def align_phonemes_and_words(
     df_phon = build_phoneme_alignment(
         audio_path, df_ipu, df_morph, iterations=iterations, alignment_buffer_s=alignment_buffer_s
     )
+    df_phon = _force_group_edges_to_ipu_boundaries(df_phon, df_ipu, "phonemeID")
     df_word = build_word_alignment(df_morph[df_morph["orth"] != "¥"].copy(), df_phon)
+    df_word = _force_group_edges_to_ipu_boundaries(df_word, df_ipu, "wordID")
     df_word_to_ipu = build_word_to_ipu(df_word)
-    df_ipu_adjusted = adjust_ipu_time(df_ipu, df_phon)
-    df_ipu_adjusted["ipu"] = df_ipu_adjusted["ipu"].str.replace("¥", "", regex=False)
+    df_phon_to_ipu = build_phoneme_to_ipu(df_phon)
+    df_ipu_output = df_ipu.copy()
+    if "IPU" in df_ipu_output.columns:
+        df_ipu_output["IPU"] = df_ipu_output["IPU"].str.replace("¥", "", regex=False)
 
     phoneme_csv = target_dir / "phoneme.csv"
     word_csv = target_dir / "word.csv"
-    word2ipu_csv = target_dir / "word2ipu.csv"
-    ipu_csv = target_dir / "ipu.csv"
+    word2ipu_csv = target_dir / "word2IPU.csv"
+    phoneme2ipu_csv = target_dir / "phoneme2IPU.csv"
+    ipu_csv = target_dir / "IPU.csv"
 
-    df_phon.to_csv(phoneme_csv, encoding="utf-8_sig", index=False)
-    df_word.to_csv(word_csv, encoding="utf-8_sig", index=False)
+    df_phon_output = df_phon.drop(columns=["IPUID"], errors="ignore")
+    df_word_output = df_word.drop(columns=["IPUID", "nth", "len"], errors="ignore")
+
+    df_phon_output.to_csv(phoneme_csv, encoding="utf-8_sig", index=False)
+    df_word_output.to_csv(word_csv, encoding="utf-8_sig", index=False)
     df_word_to_ipu.to_csv(word2ipu_csv, encoding="utf-8_sig", index=False)
-    df_ipu_adjusted.to_csv(ipu_csv, encoding="utf-8_sig", index=False)
+    df_phon_to_ipu.to_csv(phoneme2ipu_csv, encoding="utf-8_sig", index=False)
+    df_ipu_output.to_csv(ipu_csv, encoding="utf-8_sig", index=False)
 
     return {
         "phoneme_csv": phoneme_csv,
         "word_csv": word_csv,
         "word2ipu_csv": word2ipu_csv,
+        "phoneme2ipu_csv": phoneme2ipu_csv,
         "ipu_csv": ipu_csv,
         "phoneme_df": df_phon,
         "word_df": df_word,
         "word2ipu_df": df_word_to_ipu,
-        "ipu_df": df_ipu_adjusted,
+        "phoneme2ipu_df": df_phon_to_ipu,
+        "ipu_df": df_ipu_output,
     }

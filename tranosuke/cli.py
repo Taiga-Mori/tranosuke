@@ -48,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe_parser.add_argument("--beam-size", type=int, default=5)
     transcribe_parser.add_argument("--pause-threshold-ms", type=int, default=200)
     transcribe_parser.add_argument("--segment-buffer", type=float, default=0.1)
+    transcribe_parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
+    transcribe_parser.add_argument("--device-index", type=int, default=None)
 
     morph_parser = subparsers.add_parser("morph")
     morph_parser.add_argument("input_csv")
@@ -71,6 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_parser.add_argument("--beam-size", type=int, default=5)
     corpus_parser.add_argument("--pause-threshold-ms", type=int, default=200)
     corpus_parser.add_argument("--segment-buffer", type=float, default=0.1)
+    corpus_parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
+    corpus_parser.add_argument("--device-index", type=int, default=None)
     corpus_parser.add_argument("--denoise", action="store_true")
 
     subparsers.add_parser("gui")
@@ -117,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
             model_name=args.model_name,
             beam_size=args.beam_size,
             pause_threshold_ms=args.pause_threshold_ms,
+            device=args.device,
+            device_index=args.device_index,
             segment_buffer_s=args.segment_buffer,
             progress_callback=_console_progress,
         )
@@ -143,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         print(result["phoneme_csv"])
         print(result["word_csv"])
         print(result["word2ipu_csv"])
+        print(result["phoneme2ipu_csv"])
         print(result["ipu_csv"])
         return 0
 
@@ -160,6 +167,8 @@ def main(argv: list[str] | None = None) -> int:
             model_name=args.model_name,
             beam_size=args.beam_size,
             pause_threshold_ms=args.pause_threshold_ms,
+            device=args.device,
+            device_index=args.device_index,
             segment_buffer_s=args.segment_buffer,
             progress_callback=_console_progress,
         )
@@ -167,8 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         print(result.morpheme_csv)
         print(result.word_csv)
         print(result.word2ipu_csv)
-        print(result.luu_csv)
-        print(result.word2luu_csv)
+        print(result.phoneme2ipu_csv)
         print(result.phoneme_csv)
         return 0
 

@@ -1,0 +1,10 @@
+﻿filename,speaker,tier,IPUID,startTime,endTime,IPU
+sample_mp4_mono,B,IPU_B,000557B,0.557,1.327,このアプリは
+sample_mp4_mono,B,IPU_B,001577B,1.577,3.057,音声の書き起こしや
+sample_mp4_mono,B,IPU_B,003367B,3.367,4.537,携帯素解析
+sample_mp4_mono,B,IPU_B,004817B,4.817,5.397,単語や
+sample_mp4_mono,B,IPU_B,005657B,5.657,7.757,音素のセグメントができるんだって
+sample_mp4_mono,A,IPU_A,008373A,8.373,9.283,へえそうなんだ
+sample_mp4_mono,A,IPU_A,009760A,9.76,10.82,それはすごいね
+sample_mp4_mono,B,IPU_B,011404B,11.404,11.824,でしょ
+sample_mp4_mono,B,IPU_B,012292B,12.292,13.732,みんなも使ってみてね

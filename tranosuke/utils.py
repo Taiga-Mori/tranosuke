@@ -92,12 +92,12 @@ def adjust_ipu_time(df_ipu: pd.DataFrame, df_phon: pd.DataFrame) -> pd.DataFrame
         return df_ipu.copy()
 
     phoneme_ranges = (
-        df_phon.groupby("ipuID")
+        df_phon.groupby("IPUID")
         .agg(startTime_phon=("startTime", "min"), endTime_phon=("endTime", "max"))
         .reset_index()
     )
 
-    adjusted = pd.merge(df_ipu, phoneme_ranges, on="ipuID", how="left")
+    adjusted = pd.merge(df_ipu, phoneme_ranges, on="IPUID", how="left")
     adjusted["startTime"] = adjusted["startTime_phon"].combine_first(adjusted["startTime"])
     adjusted["endTime"] = adjusted["endTime_phon"].combine_first(adjusted["endTime"])
     return adjusted.drop(columns=["startTime_phon", "endTime_phon"])

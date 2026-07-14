@@ -112,17 +112,17 @@ def _is_summary_intro(next_words: pd.DataFrame | None) -> bool:
 
 def _summarize_ipus_from_words(df_word: pd.DataFrame) -> pd.DataFrame:
     summaries = []
-    for ipu_id, group in df_word.sort_values(["startTime", "endTime", "wordID"]).groupby("ipuID", sort=False):
+    for ipu_id, group in df_word.sort_values(["startTime", "endTime", "wordID"]).groupby("IPUID", sort=False):
         valid_starts = group["startTime"].dropna()
         valid_ends = group["endTime"].dropna()
         summaries.append(
             {
                 "filename": group.iloc[0]["filename"],
                 "speaker": group.iloc[0]["speaker"],
-                "ipuID": ipu_id,
+                "IPUID": ipu_id,
                 "startTime": valid_starts.min() if not valid_starts.empty else pd.NA,
                 "endTime": valid_ends.max() if not valid_ends.empty else pd.NA,
-                "ipu": _join_surface(group),
+                "IPU": _join_surface(group),
                 "wordCount": len(group),
             }
         )
@@ -167,10 +167,10 @@ def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     if df_word.empty:
         empty_luu = pd.DataFrame(
-            columns=["filename", "speaker", "tier", "luuID", "startTime", "endTime", "luu", "boundaryType", "ipuCount", "wordCount"]
+            columns=["filename", "speaker", "tier", "luuID", "startTime", "endTime", "luu", "boundaryType", "IPUCount", "wordCount"]
         )
         empty_word_map = pd.DataFrame(
-            columns=["filename", "speaker", "wordID", "ipuID", "luuID", "startTime", "endTime", "orth", "nth", "len"]
+            columns=["filename", "speaker", "wordID", "IPUID", "luuID", "startTime", "endTime", "orth", "nth", "len"]
         )
         return empty_luu, empty_word_map
 
@@ -203,7 +203,7 @@ def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                 "endTime": luu_end,
                 "luu": luu_text,
                 "boundaryType": boundary_type,
-                "ipuCount": luu_words["ipuID"].nunique(),
+                "IPUCount": luu_words["IPUID"].nunique(),
                 "wordCount": len(luu_words),
             }
         )
@@ -214,7 +214,7 @@ def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                     "filename": word_row["filename"],
                     "speaker": word_row["speaker"],
                     "wordID": word_row["wordID"],
-                    "ipuID": word_row["ipuID"],
+                    "IPUID": word_row["IPUID"],
                     "luuID": luu_id,
                     "startTime": word_row["startTime"],
                     "endTime": word_row["endTime"],

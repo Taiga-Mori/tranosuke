@@ -131,11 +131,11 @@ def analyze_ipus(df_ipu: pd.DataFrame) -> pd.DataFrame:
 
     rows = []
     for _, ipu_row in df_ipu.iterrows():
-        if not pd.notna(ipu_row["ipu"]):
+        if not pd.notna(ipu_row["IPU"]):
             continue
-        morphemes = _parse_morphemes(ipu_row["ipu"], tagger, kakasi)
+        morphemes = _parse_morphemes(ipu_row["IPU"], tagger, kakasi)
         rows.extend(
-            [[ipu_row["filename"], ipu_row["speaker"], ipu_row["ipuID"]] + item for item in morphemes]
+            [[ipu_row["filename"], ipu_row["speaker"], ipu_row["IPUID"]] + item for item in morphemes]
         )
 
     return pd.DataFrame(
@@ -143,7 +143,7 @@ def analyze_ipus(df_ipu: pd.DataFrame) -> pd.DataFrame:
         columns=[
             "filename",
             "speaker",
-            "ipuID",
+            "IPUID",
             "orth",
             "pos",
             "pos1",

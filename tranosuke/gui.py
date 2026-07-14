@@ -9,7 +9,6 @@ from tranosuke.alignment import align_phonemes_and_words
 from tranosuke.config import initialize_app, list_cuda_devices, read_user_config, save_huggingface_token
 from tranosuke.corpus import build_corpus
 from tranosuke.denoise import denoise_media
-from tranosuke.luu import build_luus_from_word_csv
 from tranosuke.media import convert_media_to_wavs
 from tranosuke.morphology import analyze_ipu_csv
 from tranosuke.transcription import transcribe_media_to_ipu_csv
@@ -155,12 +154,12 @@ def _transcription_tab() -> None:
             segment_buffer_s=segment_buffer_s,
             progress_callback=progress_callback,
         )
-        st.success(f"IPU 書き起こしを保存しました: {csv_path}")
+        st.success(f"IPU書き起こしを保存しました: {csv_path}")
 
 
 def _morphology_tab() -> None:
     st.subheader("形態素解析")
-    input_csv = st.text_input("ipu.csv のパス", key="morph_input")
+    input_csv = st.text_input("IPU.csv のパス", key="morph_input")
     if st.button("形態素解析する", key="morph_run"):
         csv_path, _ = analyze_ipu_csv(input_csv)
         st.success(f"形態素解析結果を保存しました: {csv_path}")
@@ -169,7 +168,7 @@ def _morphology_tab() -> None:
 def _alignment_tab() -> None:
     st.subheader("音素・単語アラインメント")
     audio_path = st.text_input("wav ファイル", key="align_audio")
-    ipu_csv = st.text_input("ipu.csv", key="align_ipu")
+    ipu_csv = st.text_input("IPU.csv", key="align_ipu")
     morph_csv = st.text_input("morpheme.csv", key="align_morph")
     alignment_buffer_s = st.number_input(
         "アラインメント前後バッファ 秒",
@@ -187,17 +186,9 @@ def _alignment_tab() -> None:
         result = align_phonemes_and_words(audio_path, df_ipu, df_morph, alignment_buffer_s=alignment_buffer_s)
         st.success(f"phoneme.csv: {result['phoneme_csv']}")
         st.success(f"word.csv: {result['word_csv']}")
-        st.success(f"word2ipu.csv: {result['word2ipu_csv']}")
-        st.success(f"ipu.csv: {result['ipu_csv']}")
-
-
-def _luu_tab() -> None:
-    st.subheader("LUU 作成")
-    word_csv = st.text_input("word.csv", key="luu_word_csv")
-    if st.button("LUU を作成する", key="luu_run"):
-        result = build_luus_from_word_csv(word_csv)
-        st.success(f"luu.csv: {result['luu_csv']}")
-        st.success(f"word2luu.csv: {result['word2luu_csv']}")
+        st.success(f"word2IPU.csv: {result['word2ipu_csv']}")
+        st.success(f"phoneme2IPU.csv: {result['phoneme2ipu_csv']}")
+        st.success(f"IPU.csv: {result['ipu_csv']}")
 
 
 def _corpus_tab() -> None:
@@ -241,12 +232,11 @@ def _corpus_tab() -> None:
             _show_error(error)
             return
         st.success(f"作成先: {result.media.mixed_mono_wav.parent}")
-        st.write(f"ipu.csv: {result.ipu_csv}")
+        st.write(f"IPU.csv: {result.ipu_csv}")
         st.write(f"morpheme.csv: {result.morpheme_csv}")
         st.write(f"word.csv: {result.word_csv}")
-        st.write(f"word2ipu.csv: {result.word2ipu_csv}")
-        st.write(f"luu.csv: {result.luu_csv}")
-        st.write(f"word2luu.csv: {result.word2luu_csv}")
+        st.write(f"word2IPU.csv: {result.word2ipu_csv}")
+        st.write(f"phoneme2IPU.csv: {result.phoneme2ipu_csv}")
         st.write(f"phoneme.csv: {result.phoneme_csv}")
 
 
@@ -256,7 +246,7 @@ def main() -> None:
     icon_path = Path(__file__).resolve().parent.parent / "asset" / "tranosuke.png"
     st.image(str(icon_path), width=180)
     st.title("とらのすけ")
-    st.caption("メディア変換、ノイズ低減、IPU書き起こし、形態素解析、アラインメント、LUU作成、コーパス作成")
+    st.caption("メディア変換、ノイズ低減、IPU書き起こし、形態素解析、アラインメント、コーパス作成")
 
     try:
         _ensure_startup_assets()
@@ -275,7 +265,7 @@ def main() -> None:
         _save_token_form()
 
     tabs = st.tabs(
-        ["wav変換", "ノイズ低減", "IPU書き起こし", "形態素解析", "アラインメント", "LUU作成", "コーパス作成"]
+        ["wav変換", "ノイズ低減", "IPU書き起こし", "形態素解析", "アラインメント", "コーパス作成"]
     )
     with tabs[0]:
         _conversion_tab()
@@ -288,8 +278,6 @@ def main() -> None:
     with tabs[4]:
         _alignment_tab()
     with tabs[5]:
-        _luu_tab()
-    with tabs[6]:
         _corpus_tab()
 
 

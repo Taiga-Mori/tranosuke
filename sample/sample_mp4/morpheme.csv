@@ -1,0 +1,38 @@
+﻿filename,speaker,IPUID,orth,pos,pos1,pos2,pos3,cForm,cType,lemma,ruby,pron,phonemes,nth,len
+sample_mp4_mono,B,000557B,この,連体詞,,,,,,此の,コノ,コノ,k o n o,1,3
+sample_mp4_mono,B,000557B,アプリ,名詞,普通名詞,一般,,,,アプリ-application,アプリ,アプリ,a p u r i,2,3
+sample_mp4_mono,B,000557B,は,助詞,係助詞,,,,,は,ハ,ワ,w a,3,3
+sample_mp4_mono,B,001577B,音声,名詞,普通名詞,一般,,,,音声,オンセイ,オンセー,o N s e e,1,4
+sample_mp4_mono,B,001577B,の,助詞,格助詞,,,,,の,ノ,ノ,n o,2,4
+sample_mp4_mono,B,001577B,書き起こし,名詞,普通名詞,一般,,,,書き起こし,カキオコシ,カキオコシ,k a k i o k o sh i,3,4
+sample_mp4_mono,B,001577B,や,助動詞,,,,終止形-一般,助動詞-ヤ,や,ヤ,ヤ,y a,4,4
+sample_mp4_mono,B,003367B,携帯,名詞,普通名詞,サ変可能,,,,携帯,ケイタイ,ケータイ,k e e t a i,1,3
+sample_mp4_mono,B,003367B,素,接尾辞,名詞的,一般,,,,素,ソ,ソ,s o,2,3
+sample_mp4_mono,B,003367B,解析,名詞,普通名詞,サ変可能,,,,解析,カイセキ,カイセキ,k a i s e k i,3,3
+sample_mp4_mono,B,004817B,単語,名詞,普通名詞,一般,,,,単語,タンゴ,タンゴ,t a N g o,1,2
+sample_mp4_mono,B,004817B,や,助動詞,,,,終止形-一般,助動詞-ヤ,や,ヤ,ヤ,y a,2,2
+sample_mp4_mono,B,005657B,音素,名詞,普通名詞,一般,,,,音素,オンソ,オンソ,o N s o,1,8
+sample_mp4_mono,B,005657B,の,助詞,格助詞,,,,,の,ノ,ノ,n o,2,8
+sample_mp4_mono,B,005657B,セグメント,名詞,普通名詞,一般,,,,セグメント-segment,セグメント,セグメント,s e g u m e N t o,3,8
+sample_mp4_mono,B,005657B,が,助詞,格助詞,,,,,が,ガ,ガ,g a,4,8
+sample_mp4_mono,B,005657B,できる,動詞,非自立可能,,,連体形-一般,上一段-カ行,出来る,デキル,デキル,d e k i r u,5,8
+sample_mp4_mono,B,005657B,ん,助詞,準体助詞,,,,,の,ノ,ン,N,6,8
+sample_mp4_mono,B,005657B,だ,助動詞,,,,終止形-一般,助動詞-ダ,だ,ダ,ダ,d a,7,8
+sample_mp4_mono,B,005657B,って,助詞,副助詞,,,,,って,ッテ,ッテ,cl t e,8,8
+sample_mp4_mono,A,008373A,へえ,感動詞,一般,,,,,へえ,ヘエ,ヘー,h e e,1,5
+sample_mp4_mono,A,008373A,そう,副詞,,,,,,そう,ソウ,ソー,s o o,2,5
+sample_mp4_mono,A,008373A,な,助動詞,,,,連体形-一般,助動詞-ダ,だ,ダ,ナ,n a,3,5
+sample_mp4_mono,A,008373A,ん,助詞,準体助詞,,,,,の,ノ,ン,N,4,5
+sample_mp4_mono,A,008373A,だ,助動詞,,,,終止形-一般,助動詞-ダ,だ,ダ,ダ,d a,5,5
+sample_mp4_mono,A,009760A,それ,代名詞,,,,,,其れ,ソレ,ソレ,s o r e,1,4
+sample_mp4_mono,A,009760A,は,助詞,係助詞,,,,,は,ハ,ワ,w a,2,4
+sample_mp4_mono,A,009760A,すごい,形容詞,一般,,,終止形-一般,形容詞,凄い,スゴイ,スゴイ,s u g o i,3,4
+sample_mp4_mono,A,009760A,ね,助詞,終助詞,,,,,ね,ネ,ネ,n e,4,4
+sample_mp4_mono,B,011404B,でしょ,助動詞,,,,意志推量形,助動詞-デス,です,デス,デショ,d e sh o,1,1
+sample_mp4_mono,B,012292B,みんな,名詞,普通名詞,副詞可能,,,,皆,ミナ,ミンナ,m i N n a,1,7
+sample_mp4_mono,B,012292B,も,助詞,係助詞,,,,,も,モ,モ,m o,2,7
+sample_mp4_mono,B,012292B,使っ,動詞,一般,,,連用形-促音便,五段-ワア行,使う,ツカウ,ツカッ,ts u k a ts u,3,7
+sample_mp4_mono,B,012292B,て,助詞,接続助詞,,,,,て,テ,テ,t e,4,7
+sample_mp4_mono,B,012292B,み,動詞,非自立可能,,,連用形-一般,上一段-マ行,見る,ミル,ミ,m i,5,7
+sample_mp4_mono,B,012292B,て,助詞,接続助詞,,,,,て,テ,テ,t e,6,7
+sample_mp4_mono,B,012292B,ね,助詞,終助詞,,,,,ね,ネ,ネ,n e,7,7

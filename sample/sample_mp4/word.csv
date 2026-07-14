@@ -1,0 +1,38 @@
+﻿filename,speaker,tier,wordID,startTime,endTime,orth,pos,pos1,pos2,pos3,cForm,cType,lemma,ruby,pron,phonemes
+sample_mp4_mono,B,Word_B,000557B,0.557,0.737,この,連体詞,,,,,,此の,コノ,コノ,k o n o
+sample_mp4_mono,B,Word_B,000737B,0.737,1.107,アプリ,名詞,普通名詞,一般,,,,アプリ-application,アプリ,アプリ,a p u r i
+sample_mp4_mono,B,Word_B,001107B,1.107,1.327,は,助詞,係助詞,,,,,は,ハ,ワ,w a
+sample_mp4_mono,B,Word_B,001577B,1.577,2.027,音声,名詞,普通名詞,一般,,,,音声,オンセイ,オンセー,o N s e e
+sample_mp4_mono,B,Word_B,002027B,2.027,2.157,の,助詞,格助詞,,,,,の,ノ,ノ,n o
+sample_mp4_mono,B,Word_B,002157B,2.157,2.887,書き起こし,名詞,普通名詞,一般,,,,書き起こし,カキオコシ,カキオコシ,k a k i o k o sh i
+sample_mp4_mono,B,Word_B,002887B,2.887,3.057,や,助動詞,,,,終止形-一般,助動詞-ヤ,や,ヤ,ヤ,y a
+sample_mp4_mono,B,Word_B,003367B,3.367,3.777,携帯,名詞,普通名詞,サ変可能,,,,携帯,ケイタイ,ケータイ,k e e t a i
+sample_mp4_mono,B,Word_B,003777B,3.777,3.927,素,接尾辞,名詞的,一般,,,,素,ソ,ソ,s o
+sample_mp4_mono,B,Word_B,003927B,3.927,4.537,解析,名詞,普通名詞,サ変可能,,,,解析,カイセキ,カイセキ,k a i s e k i
+sample_mp4_mono,B,Word_B,004817B,4.817,5.147,単語,名詞,普通名詞,一般,,,,単語,タンゴ,タンゴ,t a N g o
+sample_mp4_mono,B,Word_B,005147B,5.147,5.397,や,助動詞,,,,終止形-一般,助動詞-ヤ,や,ヤ,ヤ,y a
+sample_mp4_mono,B,Word_B,005657B,5.657,6.007,音素,名詞,普通名詞,一般,,,,音素,オンソ,オンソ,o N s o
+sample_mp4_mono,B,Word_B,006007B,6.007,6.147,の,助詞,格助詞,,,,,の,ノ,ノ,n o
+sample_mp4_mono,B,Word_B,006147B,6.147,6.767,セグメント,名詞,普通名詞,一般,,,,セグメント-segment,セグメント,セグメント,s e g u m e N t o
+sample_mp4_mono,B,Word_B,006767B,6.767,6.897,が,助詞,格助詞,,,,,が,ガ,ガ,g a
+sample_mp4_mono,B,Word_B,006897B,6.897,7.237,できる,動詞,非自立可能,,,連体形-一般,上一段-カ行,出来る,デキル,デキル,d e k i r u
+sample_mp4_mono,B,Word_B,007237B,7.237,7.317,ん,助詞,準体助詞,,,,,の,ノ,ン,N
+sample_mp4_mono,B,Word_B,007317B,7.317,7.447,だ,助動詞,,,,終止形-一般,助動詞-ダ,だ,ダ,ダ,d a
+sample_mp4_mono,B,Word_B,007447B,7.447,7.757,って,助詞,副助詞,,,,,って,ッテ,ッテ,cl t e
+sample_mp4_mono,A,Word_A,008373A,8.373,8.563,へえ,感動詞,一般,,,,,へえ,ヘエ,ヘー,h e e
+sample_mp4_mono,A,Word_A,008563A,8.563,8.863,そう,副詞,,,,,,そう,ソウ,ソー,s o o
+sample_mp4_mono,A,Word_A,008863A,8.863,9.033,な,助動詞,,,,連体形-一般,助動詞-ダ,だ,ダ,ナ,n a
+sample_mp4_mono,A,Word_A,009033A,9.033,9.113,ん,助詞,準体助詞,,,,,の,ノ,ン,N
+sample_mp4_mono,A,Word_A,009113A,9.113,9.283,だ,助動詞,,,,終止形-一般,助動詞-ダ,だ,ダ,ダ,d a
+sample_mp4_mono,A,Word_A,009760A,9.76,10.02,それ,代名詞,,,,,,其れ,ソレ,ソレ,s o r e
+sample_mp4_mono,A,Word_A,010020A,10.02,10.2,は,助詞,係助詞,,,,,は,ハ,ワ,w a
+sample_mp4_mono,A,Word_A,010200A,10.2,10.6,すごい,形容詞,一般,,,終止形-一般,形容詞,凄い,スゴイ,スゴイ,s u g o i
+sample_mp4_mono,A,Word_A,010600A,10.6,10.82,ね,助詞,終助詞,,,,,ね,ネ,ネ,n e
+sample_mp4_mono,B,Word_B,011404B,11.404,11.824,でしょ,助動詞,,,,意志推量形,助動詞-デス,です,デス,デショ,d e sh o
+sample_mp4_mono,B,Word_B,012292B,12.292,12.672,みんな,名詞,普通名詞,副詞可能,,,,皆,ミナ,ミンナ,m i N n a
+sample_mp4_mono,B,Word_B,012672B,12.672,12.792,も,助詞,係助詞,,,,,も,モ,モ,m o
+sample_mp4_mono,B,Word_B,012792B,12.792,13.202,使っ,動詞,一般,,,連用形-促音便,五段-ワア行,使う,ツカウ,ツカッ,ts u k a ts u
+sample_mp4_mono,B,Word_B,013202B,13.202,13.282,て,助詞,接続助詞,,,,,て,テ,テ,t e
+sample_mp4_mono,B,Word_B,013282B,13.282,13.402,み,動詞,非自立可能,,,連用形-一般,上一段-マ行,見る,ミル,ミ,m i
+sample_mp4_mono,B,Word_B,013402B,13.402,13.572,て,助詞,接続助詞,,,,,て,テ,テ,t e
+sample_mp4_mono,B,Word_B,013572B,13.572,13.732,ね,助詞,終助詞,,,,,ね,ネ,ネ,n e
