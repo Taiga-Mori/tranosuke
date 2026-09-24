@@ -1,8 +1,10 @@
-import json
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+import soundfile as sf
 
 from tranosuke.config import get_app_paths
 
@@ -38,24 +40,29 @@ def _run_subprocess(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def _probe_audio_channels(input_path: Path) -> int:
-    command = [
-        _resolve_media_tool("ffprobe"),
-        "-v",
-        "error",
-        "-select_streams",
-        "a:0",
-        "-show_entries",
-        "stream=channels",
-        "-of",
-        "json",
-        str(input_path),
-    ]
-    result = _run_subprocess(command)
-    data = json.loads(result.stdout)
-    streams = data.get("streams", [])
-    if not streams:
-        raise RuntimeError(f"音声ストリームが見つかりません: {input_path}")
-    return int(streams[0]["channels"])
+    """Count audio channels with ffmpeg only, so ffprobe does not need to be bundled."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        probe_wav = Path(temp_dir) / "probe.wav"
+        command = [
+            _resolve_media_tool("ffmpeg"),
+            "-v",
+            "error",
+            "-y",
+            "-i",
+            str(input_path),
+            "-map",
+            "0:a:0",
+            "-t",
+            "1",
+            "-acodec",
+            "pcm_s16le",
+            str(probe_wav),
+        ]
+        try:
+            _run_subprocess(command)
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError(f"音声ストリームが見つかりません: {input_path}\n{error.stderr}") from error
+        return sf.info(str(probe_wav)).channels
 
 
 def _convert_to_mono(input_path: Path, output_path: Path, sample_rate: int) -> Path:

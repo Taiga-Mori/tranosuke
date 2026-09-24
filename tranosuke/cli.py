@@ -77,7 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_parser.add_argument("--device-index", type=int, default=None)
     corpus_parser.add_argument("--denoise", action="store_true")
 
-    subparsers.add_parser("gui")
+    gui_parser = subparsers.add_parser("gui")
+    gui_parser.add_argument("--port", type=int, default=None)
     return parser
 
 
@@ -185,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
 
         gui_script = str(Path(__file__).with_name("gui.py"))
         sys.argv = ["streamlit", "run", gui_script, "--global.developmentMode=false"]
+        if args.port is not None:
+            sys.argv.append(f"--server.port={args.port}")
         return stcli.main()
 
     return 1

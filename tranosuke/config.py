@@ -1,4 +1,3 @@
-import os
 import platform
 import shutil
 import sys
@@ -88,7 +87,7 @@ def list_cuda_devices() -> list[dict[str, int | str | None]]:
 def get_base_dir() -> Path:
     if hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS)
-    return Path(os.path.abspath("."))
+    return Path(__file__).resolve().parent.parent
 
 
 def get_app_paths() -> AppPaths:

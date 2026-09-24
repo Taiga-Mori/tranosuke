@@ -32,8 +32,7 @@ LUU作成コードとCLIコマンドは残していますが、現在のGUIと�
 
 - Python 3.10 系
 - conda環境名: `tranosuke`
-- `ffmpeg`
-- `ffprobe`
+- `ffmpeg`（`ffprobe` は不要）
 - Hugging Face アカウント
 - `pyannote/speaker-diarization-community-1` の利用規約への同意
 
@@ -56,7 +55,7 @@ pip install git+https://github.com/DwangoMediaVillage/pydomino
 - `phoneme_transition_model.onnx`
 - ノイズ低減実行時のみ、DeepFilterNet の公式バイナリ
 
-`ffmpeg` はアプリ同梱版があればそれを優先し、なければシステムの `ffmpeg` / `ffprobe` を使います。
+`ffmpeg` はアプリ同梱版があればそれを優先し、なければシステムの `ffmpeg` を使います。
 
 ## Hugging Face トークン設定
 
@@ -83,6 +82,15 @@ python app.py
 ```bash
 python -m tranosuke gui
 ```
+
+ポートは既定で8501を使い、使用中なら8502、8503…と空いているポートを自動で使います。  
+ポートを指定する場合は `--port` を付けます（`start.sh` / `start.bat` でも同じです）。
+
+```bash
+python app.py --port 8600
+```
+
+指定したポートが使用中の場合は、エラーを表示して終了します。
 
 GUIでは以下のタブを使えます。
 
@@ -295,6 +303,29 @@ filename,speaker,tier,phonemeID,startTime,endTime,phoneme
 
 ```text
 filename,phonemeID,IPUID,nth,len
+```
+
+## Docker
+
+リポジトリのルートでビルドします。
+
+```bash
+docker build -f docker/Dockerfile -t tranosuke .
+docker run --gpus all -p 8501:8501 tranosuke
+```
+
+## テスト
+
+```bash
+pip install pytest
+pytest tests
+```
+
+`sample/` の音声を使って、wav変換と形態素解析を数秒で確認します。  
+コーパス一括作成まで通す場合は、Hugging Face トークンを設定したうえで次を実行します。
+
+```bash
+TRANOSUKE_RUN_SLOW=1 pytest tests
 ```
 
 ## 注意点

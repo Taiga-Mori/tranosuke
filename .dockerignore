@@ -1,0 +1,8 @@
+.git
+venv
+build
+dist
+sample
+**/__pycache__
+**/.DS_Store
+ffmpeg

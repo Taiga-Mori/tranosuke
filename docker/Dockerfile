@@ -22,19 +22,20 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
 # 作業ディレクトリ
 WORKDIR /tranosuke
 
-# requirements.txt をコピー（親ディレクトリから）
-COPY ../requirements.txt .
+# requirements.txt をコピー
+# ビルドはリポジトリのルートで実行する: docker build -f docker/Dockerfile -t tranosuke .
+COPY requirements.txt .
 
 # Pythonライブラリをインストール
 RUN pip --default-timeout=10000 install --no-cache-dir -r requirements.txt
 RUN pip --default-timeout=10000 install git+https://github.com/DwangoMediaVillage/pydomino
 
 # アプリ本体をコピー
-COPY ../ .
+COPY . .
 
 # Streamlit 設定（外部アクセスを許可）
 ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 
-# アプリ実行（Flask例）
+# Streamlit GUI を起動
 CMD ["python", "app.py"]
