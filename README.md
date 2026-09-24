@@ -43,6 +43,28 @@ pip install -r requirements.txt
 pip install git+https://github.com/DwangoMediaVillage/pydomino
 ```
 
+### GPU（CUDA）を使う場合
+
+先に CUDA 版の `torch` / `torchaudio` だけを PyTorch のインデックスから入れ、残りは PyPI から入れます。  
+`cu128` の部分は、サーバーの NVIDIA ドライバに合わせて `cu126` などに変えてください。
+
+```bash
+pip install torch==2.9.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu128
+pip install -r requirements.txt
+pip install git+https://github.com/DwangoMediaVillage/pydomino
+```
+
+`torchcodec` は PyPI の CPU 版を使います。CUDA 版（`+cuXXX` 付き）を入れると NVIDIA NPP ライブラリが見つからず、起動時にエラーになります。  
+`torchcodec` は音声の読み込みにしか使わないため、CPU 版でも話者分離や書き起こしは GPU で動きます。
+
+すでに CUDA 版が入っている場合は、次のように入れ替えてください。
+
+```bash
+pip show torchcodec | grep Version   # +cuXXX が付いていれば CUDA 版
+pip uninstall -y torchcodec
+pip install torchcodec==0.8.0 --index-url https://pypi.org/simple
+```
+
 初回起動時は、必要な辞書・モデル・公式バイナリのダウンロードに時間がかかります。
 
 ## 初回起動時の自動セットアップ

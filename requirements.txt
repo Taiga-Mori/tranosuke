@@ -11,3 +11,4 @@ soundfile==0.13.1
 streamlit==1.50.0
 torch==2.9.0
 torchaudio==2.9.0
+torchcodec==0.8.0
