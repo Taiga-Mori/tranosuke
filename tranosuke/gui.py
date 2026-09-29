@@ -246,7 +246,6 @@ def main() -> None:
     icon_path = Path(__file__).resolve().parent.parent / "asset" / "tranosuke.png"
     st.image(str(icon_path), width=180)
     st.title("とらのすけ")
-    st.caption("メディア変換、ノイズ低減、IPU書き起こし、形態素解析、アラインメント、コーパス作成")
 
     try:
         _ensure_startup_assets()
