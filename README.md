@@ -1,6 +1,6 @@
 # とらのすけ
 
-!["とらのすけ"](asset/tranosuke.png)
+<img src="asset/tranosuke.png" alt="とらのすけ" width="200">
 
 研究用の日本語音声コーパス作成アプリです。  
 メディア変換、ノイズ低減、話者分離つきIPU書き起こし、形態素解析、音素・単語アラインメント、コーパス一括作成を、GUI とコマンドラインの両方から扱えます。
@@ -149,6 +149,8 @@ python app.py --port 8600
 ```
 
 指定したポートが使用中の場合は、エラーを表示して終了します。
+
+<img src="asset/gui_corpus.png" alt="GUI のコーパス作成タブ" width="700">
 
 GUIでは以下のタブを使えます。
 
