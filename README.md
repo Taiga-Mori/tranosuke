@@ -65,6 +65,42 @@ pip uninstall -y torchcodec
 pip install torchcodec==0.8.0 --index-url https://pypi.org/simple
 ```
 
+### setuptools のバージョン
+
+`setuptools` 81 以降では `pkg_resources` が削除されています。`librosa==0.10.1` はこれを使うため、アラインメント時に `No module named 'pkg_resources'` で失敗します。  
+`setuptools` は 81 未満にしてください。
+
+```bash
+pip install "setuptools<81"
+```
+
+### pydomino のビルド
+
+`pydomino` はソースからビルドされるため、`cmake` と C++ コンパイラが必要です。  
+Ubuntu / WSL なら `sudo apt install build-essential cmake` で入ります。sudo が使えない場合は、conda-forge でビルド用の環境を作り、そのコンパイラを使います。
+
+```bash
+conda create -y -p ./buildenv -c conda-forge cxx-compiler cmake make git
+export PATH=$PWD/buildenv/bin:$PATH
+export CC=$PWD/buildenv/bin/x86_64-conda-linux-gnu-cc
+export CXX=$PWD/buildenv/bin/x86_64-conda-linux-gnu-c++
+```
+
+`-static-libstdc++` は付けないでください。同梱の onnxruntime と libstdc++ が混在し、`pydomino.Aligner` の生成時にセグメンテーション違反で落ちます。  
+conda のコンパイラでビルドすると、`pydomino_cpp*.so` が `buildenv/lib` を参照したままになります。`buildenv` を消す場合は、インストール後に参照先を外してください（システムの libstdc++ が十分新しい場合）。
+
+```bash
+SITE=$(python -c "import site;print(site.getsitepackages()[0])")
+patchelf --set-rpath '$ORIGIN/_deps/onnxruntime-src/lib/' $SITE/pydomino/pydomino_cpp*.so
+```
+
+新しい GCC では `pydomino` のソースに `#include <cstdint>` が足りず、`'uint32_t' was not declared in this scope` でビルドが失敗します。  
+その場合は `CXXFLAGS` で `cstdint` を読み込ませてからインストールしてください。
+
+```bash
+CXXFLAGS="-include cstdint" pip install git+https://github.com/DwangoMediaVillage/pydomino
+```
+
 初回起動時は、必要な辞書・モデル・公式バイナリのダウンロードに時間がかかります。
 
 ## 初回起動時の自動セットアップ
@@ -123,7 +159,15 @@ GUIでは以下のタブを使えます。
 - `アラインメント`
 - `コーパス作成`
 
-`IPU書き起こし` と `コーパス作成` では処理デバイスを選択できます。GPUを使う場合はGUI上で対象GPUを選びます。
+`IPU書き起こし` と `コーパス作成` では処理デバイスを選択できます。GPUを使う場合はGUI上で対象GPUを選びます。  
+書き起こしの品質は次の2つから選べます。
+
+| モード | Whisper モデル | ビーム幅 |
+| --- | --- | --- |
+| スピード優先 | `turbo` | 5 |
+| クオリティ優先 | `large-v3` | 10 |
+
+`最小IPU長 秒` より短い区間は書き起こさずに捨てます（既定 0.1 秒）。
 
 ## CLI の使い方
 
@@ -165,26 +209,53 @@ GPUを指定する場合:
 python -m tranosuke transcribe input.wav --device cuda --device-index 0
 ```
 
+GUI の「クオリティ優先」と同じ設定にする場合:
+
+```bash
+python -m tranosuke transcribe input.wav --model-name large-v3 --beam-size 10
+```
+
 処理内容:
 
-- pyannoteで話者区間を検出
+- pyannoteで話者区間を検出（話者区間が重ならない `exclusive_speaker_diarization` を使用）
 - 同一話者の短い隙間を結合
 - 無音区間検出でIPU候補を分割・微調整
+- `--min-ipu-ms` 未満の区間を捨てる
 - Whisperにバッファつき音声を渡して書き起こし
+- 書き起こしを正規化（下記）
 - `IPU.csv` を出力
 
+重なり発話では Whisper は大きい方の声しか書き起こせないため、話者区間は重ならないものを使います。  
 書き起こし時のバッファはWhisperに渡す音声だけに使います。出力されるIPU時刻は無音検出後の区間です。
+
+書き起こしの正規化では、形態素解析と音素アラインメントで扱えるように次の変換をします。
+
+- 算用数字を漢数字にする（`50` → `五十`、`1,000` → `千`、`3.5` → `三点五`、`007` → `〇〇七`）
+- 数字と組になる記号を読みにする（`¥500` → `五百円`、`10:30` → `十時三十分`、`2:1` → `二対一`、`3〜5` → `三から五`、`5km` → `五キロメートル`、`30℃` → `三十度`）
+- 読み上げられる記号をカタカナにする（`%` → `パーセント`、`@` → `アットマーク`、`&` → `アンド`、`+` → `プラス`、`=` → `イコール` など）
+- 仮名の後の波線は引き延ばしとして `ー` にし、それ以外の波線は `から` にする
+- 伸ばし棒 `ー` 以外の記号・句読点・空白・文字化けを削除し、先頭の `ー` も削除する
 
 主なオプション:
 
 ```bash
 --pause-threshold-ms 200
 --segment-buffer 0.1
+--min-ipu-ms 100
 --device cuda
 --device-index 0
 ```
 
-### 4. 形態素解析
+### 4. 書き起こしの正規化
+
+```bash
+python -m tranosuke normalize /path/to/IPU.csv
+```
+
+既存の `IPU.csv` に、書き起こし時と同じ正規化をかけます。正規化後に空になった IPU と、`--min-ipu-ms`（既定 100）未満の IPU は除きます。`IPUID` は変えません。  
+`--output-csv` を指定しない場合は入力ファイルを上書きします。古いバージョンで作った `IPU.csv` から形態素解析・アラインメントをやり直す前に使います。
+
+### 5. 形態素解析
 
 ```bash
 python -m tranosuke morph /path/to/IPU.csv
@@ -192,7 +263,11 @@ python -m tranosuke morph /path/to/IPU.csv
 
 `IPU.csv` を読み、`morpheme.csv` を出力します。出力列でも `IPUID` を使います。
 
-### 5. 音素・単語アラインメント
+- 単独の伸ばし棒（`好きで` + `ー`）は直前の形態素に連結し、表層形 `orth` と発音形 `pron` に `ー` を付けます（`でー` / `デー`）。原形 `lemma` と語彙素読み `ruby` は変えません。
+- `phonemes` は発音形から作る pydomino 用の音素列です。長音は同じ母音を重ね（`デー` → `d e e`）、撥音は `N`、促音は `cl` です。
+- 漢字・仮名以外の文字など、音素が作れない形態素の `phonemes` は空欄になります。
+
+### 6. 音素・単語アラインメント
 
 ```bash
 python -m tranosuke align /path/to/audio.wav /path/to/IPU.csv /path/to/morpheme.csv
@@ -207,10 +282,22 @@ python -m tranosuke align /path/to/audio.wav /path/to/IPU.csv /path/to/morpheme.
 - `word2IPU.csv`
 - `phoneme2IPU.csv`
 
-現在は、音素アラインメント後にIPU区間そのものは修正しません。  
-ただし、各IPU内の最初/最後のwordとphonemeについては、開始/終了時刻をIPU境界へ強制的に合わせます。
+アラインメントの流れ:
 
-### 6. コーパスを一括作成
+1. 各 IPU の音声に前後 0.1 秒の余白を付けて pydomino に渡します。失敗したら余白を 0.2 秒、0.4 秒、隣の IPU までの空き（最大 1 秒）と広げて再試行します。pydomino は1つのプロセスで使い回し、落ちたときだけ起動し直します。
+2. 次の IPU は pydomino を使わず、IPU 区間を音素数で等分します（均等割り当て）。
+   - 再試行してもアラインメントできなかった IPU
+   - 漢字・ひらがな・カタカナ以外の文字を含む IPU
+   - 音素が作れない形態素を含む IPU（その形態素には仮の音素 `unk` を1つ割り当てます）
+3. 均等割り当てでも1音素 1 ミリ秒を確保できないほど短い IPU はスキップし、その IPU の音素と語は出力しません。
+4. 各 IPU の最初の音素の開始と最後の音素の終了を IPU 境界に合わせます。余白にはみ出した音素は、順番を保ったまま IPU の内側へ詰め、どの音素も最低 1 ミリ秒の長さを残します。語も同じように調整します。
+5. 語の区間は、その語の音素の区間から作ります。
+
+IPU 区間そのものは修正しません。`phoneme.csv` と `word.csv` の `aligned` 列は、pydomino でアラインメントできたものが `True`、均等割り当てのものが `False` です。語は、構成する音素がすべて `True` のときだけ `True` です。
+
+pydomino の `min_aligned_timeframe`（pau 以外の各音素に割り当てる最低フレーム数、1 フレーム 10 ミリ秒）は 1 にしています。
+
+### 7. コーパスを一括作成
 
 ```bash
 python -m tranosuke corpus input.mp4 --model-name turbo --beam-size 5
@@ -228,7 +315,9 @@ python -m tranosuke corpus input.mp4 --device cuda --device-index 0
 python -m tranosuke corpus input.mp4 --denoise
 ```
 
-### 7. LUUを作成する古いCLI
+`transcribe` と同じく `--pause-threshold-ms`、`--segment-buffer`、`--min-ipu-ms` も指定できます。
+
+### 8. LUUを作成する古いCLI
 
 LUU作成コードは残しています。必要な場合だけCLIから個別に実行できます。
 
@@ -306,7 +395,7 @@ filename,speaker,IPUID,orth,pos,pos1,pos2,pos3,cForm,cType,lemma,ruby,pron,phone
 `word.csv`:
 
 ```text
-filename,speaker,tier,wordID,startTime,endTime,orth,pos,pos1,pos2,pos3,cForm,cType,lemma,ruby,pron,phonemes
+filename,speaker,tier,wordID,startTime,endTime,orth,pos,pos1,pos2,pos3,cForm,cType,lemma,ruby,pron,phonemes,aligned
 ```
 
 `word2IPU.csv`:
@@ -318,7 +407,7 @@ filename,wordID,IPUID,nth,len
 `phoneme.csv`:
 
 ```text
-filename,speaker,tier,phonemeID,startTime,endTime,phoneme
+filename,speaker,tier,phonemeID,startTime,endTime,phoneme,aligned
 ```
 
 `phoneme2IPU.csv`:
@@ -326,6 +415,11 @@ filename,speaker,tier,phonemeID,startTime,endTime,phoneme
 ```text
 filename,phonemeID,IPUID,nth,len
 ```
+
+### ID の形式
+
+`IPUID`・`wordID`・`phonemeID` は「開始時刻 + 話者」です（例: `0084830A` = 84.830 秒に始まる話者 A）。  
+開始時刻は「秒の整数部 + ミリ秒3桁」で、整数部の桁数は音声ファイルの長さから決めます（最低3桁）。1000 秒未満の音声なら `084830A`、1000 秒以上 10000 秒未満なら `0084830A` のように、同じファイルの中では桁数がそろいます。
 
 ## Docker
 
@@ -344,11 +438,13 @@ pytest tests
 ```
 
 `sample/` の音声を使って、wav変換と形態素解析を数秒で確認します。  
-コーパス一括作成まで通す場合は、Hugging Face トークンを設定したうえで次を実行します。
+コーパス一括作成まで通す場合は、Hugging Face トークンを設定したうえで次を実行します（Whisper は `tiny` モデルを使います）。
 
 ```bash
 TRANOSUKE_RUN_SLOW=1 pytest tests
 ```
+
+GPU を別の処理で使っている場合は、`CUDA_VISIBLE_DEVICES=""` を付けると CPU で実行します。
 
 ## 注意点
 
@@ -357,6 +453,9 @@ TRANOSUKE_RUN_SLOW=1 pytest tests
 - ノイズ低減はDeepFilterNetの公式バイナリに依存します
 - GPUを指定しても環境上使えない場合はCPUへフォールバックすることがあります
 - 精度は音質、雑音、重なり発話に大きく左右されます
+- Whisper は無音や雑音から「ご視聴ありがとうございました」などの定型文や、同じ語の繰り返しを出力することがあります。とらのすけではこれを判定・除外しません
+- 書き起こしの正規化による読みは推測です。単位の読み方（`km` を「キロ」と言うか「キロメートル」と言うか）など、実際の発話と違うことがあります
+- 中国語の漢字は日本語の漢字と区別できないため、日本語の読みで推測されます
 
 ## 謝辞
 

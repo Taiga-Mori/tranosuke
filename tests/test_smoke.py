@@ -78,9 +78,9 @@ def test_build_corpus(tmp_path):
     expected_columns = {
         result.ipu_csv: "filename,speaker,tier,IPUID,startTime,endTime,IPU",
         result.morpheme_csv: "filename,speaker,IPUID,orth,pos,pos1,pos2,pos3,cForm,cType,lemma,ruby,pron,phonemes,nth,len",
-        result.word_csv: "filename,speaker,tier,wordID,startTime,endTime,orth,pos,pos1,pos2,pos3,cForm,cType,lemma,ruby,pron,phonemes",
+        result.word_csv: "filename,speaker,tier,wordID,startTime,endTime,orth,pos,pos1,pos2,pos3,cForm,cType,lemma,ruby,pron,phonemes,aligned",
         result.word2ipu_csv: "filename,wordID,IPUID,nth,len",
-        result.phoneme_csv: "filename,speaker,tier,phonemeID,startTime,endTime,phoneme",
+        result.phoneme_csv: "filename,speaker,tier,phonemeID,startTime,endTime,phoneme,aligned",
         result.phoneme2ipu_csv: "filename,phonemeID,IPUID,nth,len",
     }
     for csv_path, columns in expected_columns.items():

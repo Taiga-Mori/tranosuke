@@ -6,7 +6,7 @@ from tranosuke.alignment import align_phonemes_and_words
 from tranosuke.denoise import denoise_media
 from tranosuke.media import MediaConversionResult, convert_media_to_wavs
 from tranosuke.morphology import analyze_ipus
-from tranosuke.transcription import transcribe_ipus
+from tranosuke.transcription import DEFAULT_MIN_IPU_MS, transcribe_ipus
 
 
 ProgressCallback = Callable[[float, str], None]
@@ -41,6 +41,7 @@ def build_corpus(
     device_index: int | None = None,
     segment_buffer_s: float = 0.1,
     progress_callback: ProgressCallback | None = None,
+    min_ipu_ms: int = DEFAULT_MIN_IPU_MS,
 ) -> CorpusBuildResult:
     """
     Run the end-to-end corpus pipeline from media input to CSV outputs.
@@ -67,6 +68,7 @@ def build_corpus(
         device_index=device_index,
         segment_buffer_s=segment_buffer_s,
         progress_callback=transcribe_progress,
+        min_ipu_ms=min_ipu_ms,
     )
     _report_progress(progress_callback, 0.68, "形態素解析を実行しています")
     df_morph = analyze_ipus(df_ipu)
