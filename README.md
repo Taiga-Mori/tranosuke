@@ -167,7 +167,9 @@ GUIでは以下のタブを使えます。
 | スピード優先 | `turbo` | 5 |
 | クオリティ優先 | `large-v3` | 10 |
 
-`最小IPU長 秒` より短い区間は書き起こさずに捨てます（既定 0.1 秒）。
+`最小IPU長 秒` より短い区間は書き起こさずに捨てます（既定 0.1 秒）。  
+`話者は1人` にチェックを入れると、CLI の `--single-speaker` と同じく全区間を同じ話者として扱います。  
+`Whisper に渡す前に音量をそろえる` にチェックを入れると、CLI の `--normalize-volume` と同じく作業用 wav の音量をそろえます。
 
 ## CLI の使い方
 
@@ -226,6 +228,8 @@ python -m tranosuke transcribe input.wav --model-name large-v3 --beam-size 10
 - `IPU.csv` を出力
 
 重なり発話では Whisper は大きい方の声しか書き起こせないため、話者区間は重ならないものを使います。  
+`--single-speaker` を付けると、pyannote が別話者として切り出した区間もすべて同じ話者（`A`）として扱います。話者を置き換えた結果、区間の間隔が `--pause-threshold-ms` 以内になったものはつなげます。話者が1人だけの音声で、pyannote が同じ人を複数の話者に分けてしまう場合に使います（話者分離自体は実行するので、処理時間は短くなりません）。  
+`--normalize-volume` を付けると、変換後の作業用 wav（`*_mono.wav`、ノイズ低減をした場合はその出力）の音量をそろえて上書きします。発話部分（20 ミリ秒ごとの音量が最大から 40 dB 以内のフレーム）の RMS が -20 dBFS になるように持ち上げ、ピークが 0.99 を超える場合はそこで止めます。話者分離・書き起こし・アラインメントはすべて音量をそろえた音声を使い、保存される wav もその音声です（入力ファイル自体は変更しません）。録音レベルの小さい音声で、Whisper の聞き取りを安定させるために使います。  
 書き起こし時のバッファはWhisperに渡す音声だけに使います。出力されるIPU時刻は無音検出後の区間です。
 
 書き起こしの正規化では、形態素解析と音素アラインメントで扱えるように次の変換をします。
@@ -242,6 +246,8 @@ python -m tranosuke transcribe input.wav --model-name large-v3 --beam-size 10
 --pause-threshold-ms 200
 --segment-buffer 0.1
 --min-ipu-ms 100
+--single-speaker
+--normalize-volume
 --device cuda
 --device-index 0
 ```
@@ -315,7 +321,7 @@ python -m tranosuke corpus input.mp4 --device cuda --device-index 0
 python -m tranosuke corpus input.mp4 --denoise
 ```
 
-`transcribe` と同じく `--pause-threshold-ms`、`--segment-buffer`、`--min-ipu-ms` も指定できます。
+`transcribe` と同じく `--pause-threshold-ms`、`--segment-buffer`、`--min-ipu-ms`、`--single-speaker`、`--normalize-volume` も指定できます。
 
 ### 8. LUUを作成する古いCLI
 

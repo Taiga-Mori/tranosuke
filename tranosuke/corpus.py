@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tranosuke.alignment import align_phonemes_and_words
 from tranosuke.denoise import denoise_media
-from tranosuke.media import MediaConversionResult, convert_media_to_wavs
+from tranosuke.media import MediaConversionResult, convert_media_to_wavs, normalize_wav_volume
 from tranosuke.morphology import analyze_ipus
 from tranosuke.transcription import DEFAULT_MIN_IPU_MS, transcribe_ipus
 
@@ -42,6 +42,8 @@ def build_corpus(
     segment_buffer_s: float = 0.1,
     progress_callback: ProgressCallback | None = None,
     min_ipu_ms: int = DEFAULT_MIN_IPU_MS,
+    single_speaker: bool = False,
+    normalize_volume: bool = False,
 ) -> CorpusBuildResult:
     """
     Run the end-to-end corpus pipeline from media input to CSV outputs.
@@ -53,6 +55,11 @@ def build_corpus(
     if use_denoise:
         _report_progress(progress_callback, 0.08, "ノイズ低減を実行しています")
         working_wav = denoise_media(working_wav)
+
+    if normalize_volume:
+        # 保存される作業用 wav そのものを正規化するので、書き起こし・アラインメントとも正規化後の音声を使う
+        _report_progress(progress_callback, 0.08, "音量をそろえています")
+        normalize_wav_volume(working_wav)
 
     transcribe_start = 0.15 if use_denoise else 0.08
 
@@ -69,6 +76,7 @@ def build_corpus(
         segment_buffer_s=segment_buffer_s,
         progress_callback=transcribe_progress,
         min_ipu_ms=min_ipu_ms,
+        single_speaker=single_speaker,
     )
     _report_progress(progress_callback, 0.68, "形態素解析を実行しています")
     df_morph = analyze_ipus(df_ipu)

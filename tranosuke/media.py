@@ -4,9 +4,40 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import soundfile as sf
 
 from tranosuke.config import get_app_paths
+
+
+# normalize_wav_volume の目標: 発話部分の音量（RMS, dBFS）とピークの上限
+TARGET_SPEECH_RMS_DBFS = -20.0
+MAX_PEAK = 0.99
+# 発話部分とみなすフレーム: 最も大きいフレームから SPEECH_RANGE_DB 以内
+SPEECH_RANGE_DB = 40.0
+
+
+def normalize_wav_volume(wav_path: str | Path) -> Path:
+    """wav の発話部分の音量を TARGET_SPEECH_RMS_DBFS にそろえて上書きする（ピークが MAX_PEAK を超えない範囲で）。
+
+    無音や小さな雑音の区間まで含めて測ると、録音ごとの無音の長さで音量が変わるので、
+    20ms ごとの RMS が最大フレームから SPEECH_RANGE_DB 以内のフレームだけで発話の音量を測る。
+    """
+    path = Path(wav_path)
+    audio, sample_rate = sf.read(path, dtype="float32")
+    frame = max(int(0.02 * sample_rate), 1)
+    usable = len(audio) // frame * frame
+    if usable == 0:
+        return path
+    frame_rms = np.sqrt(np.mean(np.square(audio[:usable].reshape(-1, frame, *audio.shape[1:]), dtype=np.float64), axis=tuple(range(1, audio.ndim + 1))))
+    peak = float(np.max(np.abs(audio)))
+    if peak <= 1e-9 or frame_rms.max() <= 1e-9:
+        return path
+    speech = frame_rms[frame_rms >= frame_rms.max() * 10 ** (-SPEECH_RANGE_DB / 20)]
+    speech_rms = float(np.sqrt(np.mean(np.square(speech))))
+    gain = min(10 ** (TARGET_SPEECH_RMS_DBFS / 20) / speech_rms, MAX_PEAK / peak)
+    sf.write(path, (audio * gain).astype("float32"), sample_rate, subtype="PCM_16")
+    return path
 
 
 @dataclass(frozen=True)

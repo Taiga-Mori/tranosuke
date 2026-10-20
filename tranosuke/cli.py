@@ -51,6 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe_parser.add_argument("--pause-threshold-ms", type=int, default=200)
     transcribe_parser.add_argument("--segment-buffer", type=float, default=0.1)
     transcribe_parser.add_argument("--min-ipu-ms", type=int, default=DEFAULT_MIN_IPU_MS)
+    transcribe_parser.add_argument("--single-speaker", action="store_true")
+    transcribe_parser.add_argument("--normalize-volume", action="store_true")
     transcribe_parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     transcribe_parser.add_argument("--device-index", type=int, default=None)
 
@@ -82,6 +84,8 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_parser.add_argument("--pause-threshold-ms", type=int, default=200)
     corpus_parser.add_argument("--segment-buffer", type=float, default=0.1)
     corpus_parser.add_argument("--min-ipu-ms", type=int, default=DEFAULT_MIN_IPU_MS)
+    corpus_parser.add_argument("--single-speaker", action="store_true")
+    corpus_parser.add_argument("--normalize-volume", action="store_true")
     corpus_parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     corpus_parser.add_argument("--device-index", type=int, default=None)
     corpus_parser.add_argument("--denoise", action="store_true")
@@ -142,6 +146,8 @@ def main(argv: list[str] | None = None) -> int:
             device_index=args.device_index,
             segment_buffer_s=args.segment_buffer,
             min_ipu_ms=args.min_ipu_ms,
+            single_speaker=args.single_speaker,
+            normalize_volume=args.normalize_volume,
             progress_callback=_console_progress,
         )
         print(csv_path)
@@ -190,6 +196,8 @@ def main(argv: list[str] | None = None) -> int:
             device_index=args.device_index,
             segment_buffer_s=args.segment_buffer,
             min_ipu_ms=args.min_ipu_ms,
+            single_speaker=args.single_speaker,
+            normalize_volume=args.normalize_volume,
             progress_callback=_console_progress,
         )
         print(result.ipu_csv)

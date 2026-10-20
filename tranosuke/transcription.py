@@ -16,7 +16,7 @@ from pyannote.audio.pipelines.utils.hook import ProgressHook
 from pyannote.core import Segment
 
 from tranosuke.config import detect_device, get_app_paths, read_user_config
-from tranosuke.media import convert_media_to_wavs
+from tranosuke.media import convert_media_to_wavs, normalize_wav_volume
 from tranosuke.utils import float_to_timecode, timecode_integer_digits
 
 
@@ -24,6 +24,8 @@ ProgressCallback = Callable[[float, str], None]
 DEFAULT_PAUSE_THRESHOLD_MS = 200
 # これより短い IPU は書き起こさない（ミリ秒）
 DEFAULT_MIN_IPU_MS = 100
+# single_speaker のときに全区間に付ける話者ラベル（話者名 A になる）
+SINGLE_SPEAKER_LABEL = "SPEAKER_00"
 # 書き起こしに残す記号（伸ばし棒）
 KEPT_SYMBOLS = set("ー")
 # 数字の前に付く通貨記号は、数字の後ろに読みを付ける（¥500 → 500円）
@@ -449,6 +451,7 @@ def transcribe_ipus(
     segment_buffer_s: float = 0.1,
     progress_callback: ProgressCallback | None = None,
     min_ipu_ms: int = DEFAULT_MIN_IPU_MS,
+    single_speaker: bool = False,
 ) -> pd.DataFrame:
     """
     Perform diarization and whisper transcription, then group words into IPUs.
@@ -478,7 +481,11 @@ def transcribe_ipus(
     id_digits = timecode_integer_digits(len(wav) / sample_rate)
     pause_threshold_s = max(pause_threshold_ms, 0) / 1000.0
     # 重なり発話は Whisper が大きい方しか書き起こせないため、話者区間が重ならない exclusive 版を使う
-    merged_turns = merge_consecutive_turns(diarization.exclusive_speaker_diarization, max_gap_s=pause_threshold_s)
+    speaker_turns = diarization.exclusive_speaker_diarization
+    if single_speaker:
+        # 話者が1人の音声では、pyannote が別話者として切り出した区間もすべて同じ話者として扱う
+        speaker_turns = speaker_turns.rename_labels({label: SINGLE_SPEAKER_LABEL for label in speaker_turns.labels()})
+    merged_turns = merge_consecutive_turns(speaker_turns, max_gap_s=pause_threshold_s)
     total_turns = max(len(merged_turns), 1)
     _report_progress(progress_callback, 0.25, f"話者区間を処理しています 0/{len(merged_turns)}")
 
@@ -621,6 +628,8 @@ def transcribe_media_to_ipu_csv(
     segment_buffer_s: float = 0.1,
     progress_callback: ProgressCallback | None = None,
     min_ipu_ms: int = DEFAULT_MIN_IPU_MS,
+    single_speaker: bool = False,
+    normalize_volume: bool = False,
 ) -> tuple[Path, pd.DataFrame]:
     """
     Convert media to wav if needed, transcribe it, and save IPU.csv.
@@ -628,6 +637,9 @@ def transcribe_media_to_ipu_csv(
     source = Path(input_path).expanduser().resolve()
     _report_progress(progress_callback, 0.0, "wavへ変換しています")
     conversion = convert_media_to_wavs(source, output_dir=output_dir, split_channels=False)
+    if normalize_volume:
+        _report_progress(progress_callback, 0.05, "音量をそろえています")
+        normalize_wav_volume(conversion.mixed_mono_wav)
 
     def transcribe_progress(value: float, message: str) -> None:
         _report_progress(progress_callback, 0.1 + 0.85 * value, message)
@@ -642,6 +654,7 @@ def transcribe_media_to_ipu_csv(
         segment_buffer_s=segment_buffer_s,
         progress_callback=transcribe_progress,
         min_ipu_ms=min_ipu_ms,
+        single_speaker=single_speaker,
     )
     csv_path = conversion.mixed_mono_wav.parent / "IPU.csv"
     _report_progress(progress_callback, 0.98, "CSVへ保存しています")

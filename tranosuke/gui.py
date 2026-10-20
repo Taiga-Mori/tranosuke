@@ -148,6 +148,16 @@ def _transcription_tab() -> None:
         step=0.01,
         key="transcribe_min_ipu",
     )
+    single_speaker = st.checkbox(
+        "話者は1人（別話者と判定された区間も同じ話者にする）",
+        value=False,
+        key="transcribe_single_speaker",
+    )
+    normalize_volume = st.checkbox(
+        "Whisper に渡す前に音量をそろえる",
+        value=False,
+        key="transcribe_normalize_volume",
+    )
     device, device_index = _device_selector("transcribe_device")
     if st.button("書き起こす", key="transcribe_run"):
         options = QUALITY_OPTIONS[quality]
@@ -161,6 +171,8 @@ def _transcription_tab() -> None:
             device_index=device_index,
             segment_buffer_s=segment_buffer_s,
             min_ipu_ms=int(round(min_ipu_s * 1000)),
+            single_speaker=single_speaker,
+            normalize_volume=normalize_volume,
             progress_callback=progress_callback,
         )
         st.success(f"IPU書き起こしを保存しました: {csv_path}")
@@ -230,6 +242,16 @@ def _corpus_tab() -> None:
         step=0.01,
         key="corpus_min_ipu",
     )
+    single_speaker = st.checkbox(
+        "話者は1人（別話者と判定された区間も同じ話者にする）",
+        value=False,
+        key="corpus_single_speaker",
+    )
+    normalize_volume = st.checkbox(
+        "Whisper に渡す前に音量をそろえる",
+        value=False,
+        key="corpus_normalize_volume",
+    )
     device, device_index = _device_selector("corpus_device")
     if st.button("コーパスを作成", key="corpus_run"):
         options = QUALITY_OPTIONS[quality]
@@ -245,6 +267,8 @@ def _corpus_tab() -> None:
                 device_index=device_index,
                 segment_buffer_s=segment_buffer_s,
                 min_ipu_ms=int(round(min_ipu_s * 1000)),
+                single_speaker=single_speaker,
+                normalize_volume=normalize_volume,
                 progress_callback=progress_callback,
             )
         except Exception as error:
