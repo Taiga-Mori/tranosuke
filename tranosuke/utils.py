@@ -73,17 +73,29 @@ def download_and_extract(url: str, destination_dir: str | Path, archive_name: st
     return target_dir
 
 
-def float_to_timecode(value: float) -> str | None:
-    """Convert seconds into a zero-padded fixed-width millisecond-ish ID chunk."""
+DEFAULT_TIMECODE_INTEGER_DIGITS = 3
+
+
+def timecode_integer_digits(duration_s: float) -> int:
+    """Return how many integer-second digits IDs need to stay unique within a recording of this length."""
+    integer_part = f"{max(float(duration_s), 0.0):.3f}".split(".")[0]
+    return max(DEFAULT_TIMECODE_INTEGER_DIGITS, len(integer_part))
+
+
+def float_to_timecode(value: float, integer_digits: int = DEFAULT_TIMECODE_INTEGER_DIGITS) -> str | None:
+    """Convert seconds into a zero-padded ID chunk: integer_digits of seconds + 3 digits of milliseconds."""
     if value is None:
         return None
 
-    text = f"{value:.3f}".replace(".", "")
-    if len(text) < 6:
-        return text.zfill(6)
-    if len(text) > 6:
-        return text[:6]
-    return text
+    width = integer_digits + 3
+    text = f"{value:.3f}"
+    if "." not in text:
+        return text.zfill(width)
+
+    integer_part, fraction_part = text.split(".")
+    if len(integer_part) > integer_digits:
+        raise ValueError(f"{value} 秒は {integer_digits} 桁の秒数に収まりません。")
+    return integer_part.zfill(integer_digits) + fraction_part
 
 
 def adjust_ipu_time(df_ipu: pd.DataFrame, df_phon: pd.DataFrame) -> pd.DataFrame:

@@ -11,7 +11,7 @@ from tranosuke.corpus import build_corpus
 from tranosuke.denoise import denoise_media
 from tranosuke.media import convert_media_to_wavs
 from tranosuke.morphology import analyze_ipu_csv
-from tranosuke.transcription import transcribe_media_to_ipu_csv
+from tranosuke.transcription import DEFAULT_MIN_IPU_MS, transcribe_media_to_ipu_csv
 
 
 _FAULT_LOG_FILE = None
@@ -140,6 +140,14 @@ def _transcription_tab() -> None:
         step=0.01,
         key="transcribe_pause_threshold",
     )
+    min_ipu_s = st.number_input(
+        "最小IPU長 秒",
+        min_value=0.0,
+        max_value=5.0,
+        value=DEFAULT_MIN_IPU_MS / 1000,
+        step=0.01,
+        key="transcribe_min_ipu",
+    )
     device, device_index = _device_selector("transcribe_device")
     if st.button("書き起こす", key="transcribe_run"):
         options = QUALITY_OPTIONS[quality]
@@ -152,6 +160,7 @@ def _transcription_tab() -> None:
             device=device,
             device_index=device_index,
             segment_buffer_s=segment_buffer_s,
+            min_ipu_ms=int(round(min_ipu_s * 1000)),
             progress_callback=progress_callback,
         )
         st.success(f"IPU書き起こしを保存しました: {csv_path}")
@@ -182,7 +191,8 @@ def _alignment_tab() -> None:
         import pandas as pd
 
         df_ipu = pd.read_csv(ipu_csv)
-        df_morph = pd.read_csv(morph_csv)
+        # 記号など音素のない形態素は phonemes が空欄なので、NaN ではなく空文字列として読む
+        df_morph = pd.read_csv(morph_csv, keep_default_na=False)
         result = align_phonemes_and_words(audio_path, df_ipu, df_morph, alignment_buffer_s=alignment_buffer_s)
         st.success(f"phoneme.csv: {result['phoneme_csv']}")
         st.success(f"word.csv: {result['word_csv']}")
@@ -212,6 +222,14 @@ def _corpus_tab() -> None:
         step=0.01,
         key="corpus_pause_threshold",
     )
+    min_ipu_s = st.number_input(
+        "最小IPU長 秒",
+        min_value=0.0,
+        max_value=5.0,
+        value=DEFAULT_MIN_IPU_MS / 1000,
+        step=0.01,
+        key="corpus_min_ipu",
+    )
     device, device_index = _device_selector("corpus_device")
     if st.button("コーパスを作成", key="corpus_run"):
         options = QUALITY_OPTIONS[quality]
@@ -226,6 +244,7 @@ def _corpus_tab() -> None:
                 device=device,
                 device_index=device_index,
                 segment_buffer_s=segment_buffer_s,
+                min_ipu_ms=int(round(min_ipu_s * 1000)),
                 progress_callback=progress_callback,
             )
         except Exception as error:

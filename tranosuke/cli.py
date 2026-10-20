@@ -2,6 +2,8 @@ import argparse
 from pathlib import Path
 import sys
 
+import pandas as pd
+
 from tranosuke.alignment import align_phonemes_and_words
 from tranosuke.config import initialize_app, save_huggingface_token
 from tranosuke.corpus import build_corpus
@@ -9,7 +11,7 @@ from tranosuke.denoise import denoise_media
 from tranosuke.luu import build_luus_from_word_csv
 from tranosuke.media import convert_media_to_wavs
 from tranosuke.morphology import analyze_ipu_csv
-from tranosuke.transcription import transcribe_media_to_ipu_csv
+from tranosuke.transcription import DEFAULT_MIN_IPU_MS, normalize_ipu_table, transcribe_media_to_ipu_csv
 
 
 def _console_progress(value: float, message: str) -> None:
@@ -48,8 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe_parser.add_argument("--beam-size", type=int, default=5)
     transcribe_parser.add_argument("--pause-threshold-ms", type=int, default=200)
     transcribe_parser.add_argument("--segment-buffer", type=float, default=0.1)
+    transcribe_parser.add_argument("--min-ipu-ms", type=int, default=DEFAULT_MIN_IPU_MS)
     transcribe_parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     transcribe_parser.add_argument("--device-index", type=int, default=None)
+
+    normalize_parser = subparsers.add_parser("normalize")
+    normalize_parser.add_argument("ipu_csv")
+    normalize_parser.add_argument("--output-csv")
+    normalize_parser.add_argument("--min-ipu-ms", type=int, default=DEFAULT_MIN_IPU_MS)
 
     morph_parser = subparsers.add_parser("morph")
     morph_parser.add_argument("input_csv")
@@ -73,6 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_parser.add_argument("--beam-size", type=int, default=5)
     corpus_parser.add_argument("--pause-threshold-ms", type=int, default=200)
     corpus_parser.add_argument("--segment-buffer", type=float, default=0.1)
+    corpus_parser.add_argument("--min-ipu-ms", type=int, default=DEFAULT_MIN_IPU_MS)
     corpus_parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
     corpus_parser.add_argument("--device-index", type=int, default=None)
     corpus_parser.add_argument("--denoise", action="store_true")
@@ -115,6 +124,13 @@ def main(argv: list[str] | None = None) -> int:
         print(denoise_media(args.input_path, output_dir=args.output_dir))
         return 0
 
+    if args.command == "normalize":
+        output_csv = Path(args.output_csv) if args.output_csv else Path(args.ipu_csv)
+        df_ipu = normalize_ipu_table(pd.read_csv(args.ipu_csv), min_ipu_ms=args.min_ipu_ms)
+        df_ipu.to_csv(output_csv, encoding="utf-8_sig", index=False)
+        print(output_csv)
+        return 0
+
     if args.command == "transcribe":
         csv_path, _ = transcribe_media_to_ipu_csv(
             args.input_path,
@@ -125,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             device=args.device,
             device_index=args.device_index,
             segment_buffer_s=args.segment_buffer,
+            min_ipu_ms=args.min_ipu_ms,
             progress_callback=_console_progress,
         )
         print(csv_path)
@@ -139,7 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         import pandas as pd
 
         df_ipu = pd.read_csv(args.ipu_csv)
-        df_morph = pd.read_csv(args.morpheme_csv)
+        # 記号など音素のない形態素は phonemes が空欄なので、NaN ではなく空文字列として読む
+        df_morph = pd.read_csv(args.morpheme_csv, keep_default_na=False)
         result = align_phonemes_and_words(
             args.audio_path,
             df_ipu,
@@ -171,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
             device=args.device,
             device_index=args.device_index,
             segment_buffer_s=args.segment_buffer,
+            min_ipu_ms=args.min_ipu_ms,
             progress_callback=_console_progress,
         )
         print(result.ipu_csv)

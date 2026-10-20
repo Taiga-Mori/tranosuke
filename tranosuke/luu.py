@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from tranosuke.utils import float_to_timecode
+from tranosuke.utils import float_to_timecode, timecode_integer_digits
 
 
 INTERJECTION_WORDS = {
@@ -158,6 +158,14 @@ def _decide_boundary(
     return False, "CONTINUE"
 
 
+def _timecode_digits_from_word_ids(df_word: pd.DataFrame) -> int:
+    """LUU の ID を語の ID と同じ桁数にするため、wordID（秒の整数部 + ミリ秒3桁 + 話者）から桁数を読み取る。"""
+    if df_word.empty or "wordID" not in df_word.columns:
+        return timecode_integer_digits(0.0)
+    sample = df_word.dropna(subset=["wordID", "speaker"]).iloc[0]
+    return len(str(sample["wordID"])) - len(str(sample["speaker"])) - 3
+
+
 def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Build heuristic LUUs from word timing and part-of-speech information.
@@ -165,6 +173,7 @@ def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     LUU boundaries are evaluated at word positions, not only at IPU boundaries,
     because sentence-final expressions can occur inside a single IPU.
     """
+    id_digits = _timecode_digits_from_word_ids(df_word)
     if df_word.empty:
         empty_luu = pd.DataFrame(
             columns=["filename", "speaker", "tier", "luuID", "startTime", "endTime", "luu", "boundaryType", "IPUCount", "wordCount"]
@@ -190,7 +199,7 @@ def build_luus(df_word: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         valid_ends = luu_words["endTime"].dropna()
         luu_start = valid_starts.min() if not valid_starts.empty else pd.NA
         luu_end = valid_ends.max() if not valid_ends.empty else pd.NA
-        luu_id = f"{float_to_timecode(luu_start)}{speaker}" if pd.notna(luu_start) else f"unknown{speaker}{len(luu_rows)+1}"
+        luu_id = f"{float_to_timecode(luu_start, id_digits)}{speaker}" if pd.notna(luu_start) else f"unknown{speaker}{len(luu_rows)+1}"
         luu_text = _join_surface(luu_words)
 
         luu_rows.append(

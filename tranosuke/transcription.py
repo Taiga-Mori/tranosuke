@@ -1,4 +1,6 @@
 import os
+import re
+import unicodedata
 import inspect
 from collections.abc import Callable
 import tempfile
@@ -15,11 +17,88 @@ from pyannote.core import Segment
 
 from tranosuke.config import detect_device, get_app_paths, read_user_config
 from tranosuke.media import convert_media_to_wavs
-from tranosuke.utils import float_to_timecode
+from tranosuke.utils import float_to_timecode, timecode_integer_digits
 
 
 ProgressCallback = Callable[[float, str], None]
 DEFAULT_PAUSE_THRESHOLD_MS = 200
+# これより短い IPU は書き起こさない（ミリ秒）
+DEFAULT_MIN_IPU_MS = 100
+# 書き起こしに残す記号（伸ばし棒）
+KEPT_SYMBOLS = set("ー")
+# 数字の前に付く通貨記号は、数字の後ろに読みを付ける（¥500 → 500円）
+CURRENCY_PREFIXES = {"¥": "円", "￥": "円", "$": "ドル", "＄": "ドル", "€": "ユーロ", "£": "ポンド", "₩": "ウォン"}
+# 数字の直後の単位記号の読み（英字の単位は後ろに英字が続かない場合だけ置き換える）
+UNIT_READINGS = {
+    "km": "キロメートル",
+    "kg": "キログラム",
+    "cm": "センチ",
+    "mm": "ミリ",
+    "mg": "ミリグラム",
+    "ml": "ミリリットル",
+    "mL": "ミリリットル",
+    "m": "メートル",
+    "g": "グラム",
+    "L": "リットル",
+    "KB": "キロバイト",
+    "kB": "キロバイト",
+    "MB": "メガバイト",
+    "GB": "ギガバイト",
+    "TB": "テラバイト",
+    "kHz": "キロヘルツ",
+    "MHz": "メガヘルツ",
+    "GHz": "ギガヘルツ",
+    "Hz": "ヘルツ",
+    "kW": "キロワット",
+    "W": "ワット",
+    "V": "ボルト",
+    "°C": "度",
+    "℃": "度",
+    "°F": "度",
+    "℉": "度",
+    "°": "度",
+}
+# 読み上げられる記号はカタカナ（または読みの漢字）にする
+SPOKEN_SYMBOLS = {
+    "%": "パーセント",
+    "％": "パーセント",
+    "‰": "パーミル",
+    "#": "シャープ",
+    "＃": "シャープ",
+    "♯": "シャープ",
+    "♭": "フラット",
+    "@": "アットマーク",
+    "＠": "アットマーク",
+    "&": "アンド",
+    "＆": "アンド",
+    "+": "プラス",
+    "＋": "プラス",
+    "±": "プラスマイナス",
+    "×": "カケル",
+    "÷": "ワル",
+    "=": "イコール",
+    "＝": "イコール",
+    "≠": "ノットイコール",
+    "≒": "ニアリーイコール",
+    "№": "ナンバー",
+    "℃": "度",
+    "℉": "度",
+    "°": "度",
+    **CURRENCY_PREFIXES,
+}
+NUMBER_TEXT = r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?"
+CURRENCY_PATTERN = re.compile(rf"([{''.join(map(re.escape, CURRENCY_PREFIXES))}])\s*({NUMBER_TEXT})")
+UNIT_PATTERN = re.compile(
+    rf"({NUMBER_TEXT})\s*({'|'.join(map(re.escape, sorted(UNIT_READINGS, key=len, reverse=True)))})(?![A-Za-z])"
+)
+# 時刻（10:30 → 10時30分、10:00 → 10時）
+TIME_PATTERN = re.compile(r"(?<![\d:：])([01]?\d|2[0-3])[:：]([0-5]\d)(?![\d:：])")
+# 時刻にならない数字どうしのコロンは比（2:1 → 2対1）
+RATIO_PATTERN = re.compile(r"(?<=\d)\s*[:：]\s*(?=\d)")
+# 範囲（3〜5 → 3から5）
+RANGE_PATTERN = re.compile(rf"({NUMBER_TEXT})\s*[〜～~]\s*(?=\d)")
+TILDES = "〜～~"
+KANA_PATTERN = re.compile(r"[\u3041-\u309F\u30A0-\u30FF]")
 SILENCE_THRESHOLD_DB = 35.0
 MIN_SPEECH_CHUNK_S = 0.05
 
@@ -73,11 +152,100 @@ def _load_huggingface_token() -> str:
     return token
 
 
-def _normalize_ipu_text(words: list[str]) -> str:
-    text = "".join(word.strip() for word in words if word)
-    for char in [" ", "、", "。", ",", ".", ":", ";", "〜"]:
-        text = text.replace(char, "")
-    return text
+KANJI_DIGITS = "〇一二三四五六七八九"
+KANJI_SMALL_UNITS = [(1000, "千"), (100, "百"), (10, "十")]
+KANJI_LARGE_UNITS = [(10**12, "兆"), (10**8, "億"), (10**4, "万")]
+# 3桁区切りのカンマを含む整数、または小数（全角数字は事前に半角へ寄せる）
+NUMBER_PATTERN = re.compile(NUMBER_TEXT)
+
+
+def _integer_below_10000_to_kanji(value: int) -> str:
+    text = ""
+    for unit, unit_char in KANJI_SMALL_UNITS:
+        digit, value = divmod(value, unit)
+        if digit:
+            text += ("" if digit == 1 else KANJI_DIGITS[digit]) + unit_char
+    return text + (KANJI_DIGITS[value] if value else "")
+
+
+def _integer_to_kanji(digits: str) -> str:
+    # 先頭が0の数字列（007 など）や16桁を超える数字列は、位取りせず1桁ずつ読む
+    if (len(digits) > 1 and digits.startswith("0")) or len(digits) > 16:
+        return "".join(KANJI_DIGITS[int(digit)] for digit in digits)
+    value = int(digits)
+    if value == 0:
+        return KANJI_DIGITS[0]
+    text = ""
+    for unit, unit_char in KANJI_LARGE_UNITS:
+        chunk, value = divmod(value, unit)
+        if chunk:
+            text += _integer_below_10000_to_kanji(chunk) + unit_char
+    return text + _integer_below_10000_to_kanji(value)
+
+
+def arabic_numerals_to_kanji(text: str) -> str:
+    """算用数字を漢数字に置き換える（50 → 五十、1,000 → 千、3.5 → 三点五）。"""
+    text = _to_halfwidth_digits(text)
+
+    def replace(match: re.Match) -> str:
+        integer_part, _, fraction_part = match.group(0).replace(",", "").partition(".")
+        kanji = _integer_to_kanji(integer_part)
+        if fraction_part:
+            kanji += "点" + "".join(KANJI_DIGITS[int(digit)] for digit in fraction_part)
+        return kanji
+
+    return NUMBER_PATTERN.sub(replace, text)
+
+
+def _to_halfwidth_digits(text: str) -> str:
+    return "".join(chr(ord(char) - 0xFEE0) if "０" <= char <= "９" else char for char in text)
+
+
+def _replace_tildes(text: str) -> str:
+    # 仮名の後の波線は引き延ばし（あの〜 → あのー）、それ以外は範囲（東京〜大阪 → 東京から大阪）、先頭は削除
+    characters = []
+    for index, char in enumerate(text):
+        if char not in TILDES:
+            characters.append(char)
+        elif characters and KANA_PATTERN.fullmatch(characters[-1]) or characters and characters[-1] == "ー":
+            characters.append("ー")
+        elif characters:
+            characters.append("から")
+    return "".join(characters)
+
+
+def normalize_ipu_text(text: str) -> str:
+    """Whisper の書き起こしを、形態素解析と音素アラインメントで扱える文字列にそろえる。"""
+    text = _to_halfwidth_digits(text.strip())
+    # 数字と組になる記号は、数字を漢数字にする前に読みへ置き換える
+    text = CURRENCY_PATTERN.sub(lambda match: match.group(2) + CURRENCY_PREFIXES[match.group(1)], text)
+    text = TIME_PATTERN.sub(
+        lambda match: f"{match.group(1)}時" + ("" if match.group(2) == "00" else f"{match.group(2)}分"), text
+    )
+    text = RATIO_PATTERN.sub("対", text)
+    text = RANGE_PATTERN.sub(lambda match: f"{match.group(1)}から", text)
+    text = UNIT_PATTERN.sub(lambda match: match.group(1) + UNIT_READINGS[match.group(2)], text)
+    # 数字は記号の削除より前に漢数字にする（3.5 の小数点や 1,000 のカンマを読みとして残すため）
+    text = arabic_numerals_to_kanji(text)
+    for symbol, reading in SPOKEN_SYMBOLS.items():
+        text = text.replace(symbol, reading)
+    text = _replace_tildes(text)
+    # 伸ばし棒以外の記号・句読点・空白・制御文字（文字化けの U+FFFD を含む）は削除する
+    text = "".join(
+        char
+        for char in text
+        if char in KEPT_SYMBOLS or unicodedata.category(char)[0] not in {"P", "S", "Z", "C"}
+    )
+    # 先頭の伸ばし棒は伸ばす対象がないので削除する
+    return text.lstrip("ー")
+
+
+def normalize_ipu_table(df_ipu: pd.DataFrame, min_ipu_ms: int = DEFAULT_MIN_IPU_MS) -> pd.DataFrame:
+    """IPU.csv の書き起こしを正規化し、正規化後に空になった IPU と min_ipu_ms 未満の IPU を除く。"""
+    df = df_ipu.copy()
+    df["IPU"] = df["IPU"].fillna("").astype(str).map(normalize_ipu_text)
+    long_enough = (df["endTime"] - df["startTime"]) >= max(min_ipu_ms, 0) / 1000.0
+    return df[(df["IPU"] != "") & long_enough].reset_index(drop=True)
 
 
 def _resolve_whisper_device(device: str) -> str:
@@ -280,6 +448,7 @@ def transcribe_ipus(
     device_index: int | None = None,
     segment_buffer_s: float = 0.1,
     progress_callback: ProgressCallback | None = None,
+    min_ipu_ms: int = DEFAULT_MIN_IPU_MS,
 ) -> pd.DataFrame:
     """
     Perform diarization and whisper transcription, then group words into IPUs.
@@ -306,8 +475,10 @@ def transcribe_ipus(
         diarization = pipeline({"waveform": waveform, "sample_rate": sample_rate}, hook=hook)
 
     ipus = []
+    id_digits = timecode_integer_digits(len(wav) / sample_rate)
     pause_threshold_s = max(pause_threshold_ms, 0) / 1000.0
-    merged_turns = merge_consecutive_turns(diarization.speaker_diarization, max_gap_s=pause_threshold_s)
+    # 重なり発話は Whisper が大きい方しか書き起こせないため、話者区間が重ならない exclusive 版を使う
+    merged_turns = merge_consecutive_turns(diarization.exclusive_speaker_diarization, max_gap_s=pause_threshold_s)
     total_turns = max(len(merged_turns), 1)
     _report_progress(progress_callback, 0.25, f"話者区間を処理しています 0/{len(merged_turns)}")
 
@@ -361,6 +532,10 @@ def transcribe_ipus(
         )
 
     speech_chunks = _merge_speech_chunks(speech_chunks, pause_threshold_s)
+    min_ipu_s = max(min_ipu_ms, 0) / 1000.0
+    speech_chunks = [
+        chunk for chunk in speech_chunks if float(chunk["end"]) - float(chunk["start"]) >= min_ipu_s
+    ]
     total_chunks = max(len(speech_chunks), 1)
     for chunk_index, chunk in enumerate(speech_chunks, start=1):
         speech_start = float(chunk["start"])
@@ -408,7 +583,7 @@ def transcribe_ipus(
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
-        text = _normalize_ipu_text([text])
+        text = normalize_ipu_text(text)
         if not text:
             continue
 
@@ -418,7 +593,7 @@ def transcribe_ipus(
                 "filename": source.stem,
                 "speaker": speaker,
                 "tier": f"IPU_{speaker}",
-                "IPUID": f"{float_to_timecode(speech_start)}{speaker}",
+                "IPUID": f"{float_to_timecode(speech_start, id_digits)}{speaker}",
                 "startTime": round(speech_start, 3),
                 "endTime": round(speech_end, 3),
                 "IPU": text,
@@ -445,6 +620,7 @@ def transcribe_media_to_ipu_csv(
     device_index: int | None = None,
     segment_buffer_s: float = 0.1,
     progress_callback: ProgressCallback | None = None,
+    min_ipu_ms: int = DEFAULT_MIN_IPU_MS,
 ) -> tuple[Path, pd.DataFrame]:
     """
     Convert media to wav if needed, transcribe it, and save IPU.csv.
@@ -465,6 +641,7 @@ def transcribe_media_to_ipu_csv(
         device_index=device_index,
         segment_buffer_s=segment_buffer_s,
         progress_callback=transcribe_progress,
+        min_ipu_ms=min_ipu_ms,
     )
     csv_path = conversion.mixed_mono_wav.parent / "IPU.csv"
     _report_progress(progress_callback, 0.98, "CSVへ保存しています")
