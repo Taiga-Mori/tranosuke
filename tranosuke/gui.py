@@ -18,8 +18,10 @@ _FAULT_LOG_FILE = None
 
 
 QUALITY_OPTIONS = {
-    "スピード優先": {"model_name": "turbo", "beam_size": 5},
-    "クオリティ優先": {"model_name": "large-v3", "beam_size": 10},
+    "Ruby-ASR 字幕向け（subtitle）": {"model_name": "ruby-subtitle", "beam_size": 5},
+    "Ruby-ASR 逐語向け（verbatim）": {"model_name": "ruby-verbatim", "beam_size": 5},
+    "Whisper turbo（スピード優先）": {"model_name": "turbo", "beam_size": 5},
+    "Whisper large-v3（クオリティ優先）": {"model_name": "large-v3", "beam_size": 10},
 }
 
 
@@ -123,7 +125,7 @@ def _denoise_tab() -> None:
 def _transcription_tab() -> None:
     st.subheader("話者分離と IPU 書き起こし")
     input_path = st.text_input("入力ファイル", key="transcribe_input")
-    quality = st.radio("品質", list(QUALITY_OPTIONS), key="transcribe_quality")
+    quality = st.radio("書き起こしモデル", list(QUALITY_OPTIONS), key="transcribe_quality")
     segment_buffer_s = st.number_input(
         "話者区間の前後バッファ 秒",
         min_value=0.0,
@@ -154,7 +156,7 @@ def _transcription_tab() -> None:
         key="transcribe_single_speaker",
     )
     normalize_volume = st.checkbox(
-        "Whisper に渡す前に音量をそろえる",
+        "書き起こしの前に音量をそろえる",
         value=False,
         key="transcribe_normalize_volume",
     )
@@ -216,7 +218,7 @@ def _alignment_tab() -> None:
 def _corpus_tab() -> None:
     st.subheader("コーパスを一括作成")
     input_path = st.text_input("入力ファイル", key="corpus_input")
-    quality = st.radio("品質", list(QUALITY_OPTIONS), key="corpus_quality")
+    quality = st.radio("書き起こしモデル", list(QUALITY_OPTIONS), key="corpus_quality")
     use_denoise = st.checkbox("先にノイズ低減を行う", value=False, key="corpus_denoise")
     segment_buffer_s = st.number_input(
         "話者区間の前後バッファ 秒",
@@ -248,7 +250,7 @@ def _corpus_tab() -> None:
         key="corpus_single_speaker",
     )
     normalize_volume = st.checkbox(
-        "Whisper に渡す前に音量をそろえる",
+        "書き起こしの前に音量をそろえる",
         value=False,
         key="corpus_normalize_volume",
     )

@@ -6,7 +6,7 @@ from tranosuke.alignment import align_phonemes_and_words
 from tranosuke.denoise import denoise_media
 from tranosuke.media import MediaConversionResult, convert_media_to_wavs, normalize_wav_volume
 from tranosuke.morphology import analyze_ipus
-from tranosuke.transcription import DEFAULT_MIN_IPU_MS, transcribe_ipus
+from tranosuke.transcription import DEFAULT_MIN_IPU_MS, DEFAULT_MODEL_NAME, transcribe_ipus
 
 
 ProgressCallback = Callable[[float, str], None]
@@ -34,7 +34,7 @@ def build_corpus(
     input_path: str | Path,
     output_dir: str | Path | None = None,
     use_denoise: bool = False,
-    model_name: str = "turbo",
+    model_name: str = DEFAULT_MODEL_NAME,
     beam_size: int = 5,
     pause_threshold_ms: int = 200,
     device: str | None = None,

@@ -9,7 +9,7 @@
 
 1. メディアファイルを wav に変換
 2. 音声・動画のノイズを低減
-3. pyannote + faster-whisper による話者分離つきIPU書き起こし
+3. pyannote + faster-whisper / Ruby-ASR による話者分離つきIPU書き起こし
 4. MeCab + UniDic-CSJ による形態素解析
 5. pydomino による音素アラインメントと単語アラインメント
 6. コーパスCSV一括作成
@@ -162,16 +162,20 @@ GUIでは以下のタブを使えます。
 - `コーパス作成`
 
 `IPU書き起こし` と `コーパス作成` では処理デバイスを選択できます。GPUを使う場合はGUI上で対象GPUを選びます。  
-書き起こしの品質は次の2つから選べます。
+書き起こしモデルは次の4つから選べます。
 
-| モード | Whisper モデル | ビーム幅 |
-| --- | --- | --- |
-| スピード優先 | `turbo` | 5 |
-| クオリティ優先 | `large-v3` | 10 |
+| モード | モデル | `--model-name` | ビーム幅 |
+| --- | --- | --- | --- |
+| Ruby-ASR 字幕向け（subtitle、既定） | [Ruby-ASR-1.7B](https://huggingface.co/hshispeech/Ruby-ASR-1.7B) の `subtitle` | `ruby-subtitle` | 使わない |
+| Ruby-ASR 逐語向け（verbatim） | [Ruby-ASR-1.7B](https://huggingface.co/hshispeech/Ruby-ASR-1.7B) の `verbatim` | `ruby-verbatim` | 使わない |
+| Whisper turbo（スピード優先） | Whisper turbo | `turbo` | 5 |
+| Whisper large-v3（クオリティ優先） | Whisper large-v3 | `large-v3` | 10 |
+
+Ruby-ASR は Qwen3-ASR-1.7B を日本語向けに追加学習したモデルです。千葉3人会話コーパスで試したところ、Whisper large-v3 より誤りが少なく、処理も大幅に速くなりました（下記「Ruby-ASR について」）。
 
 `最小IPU長 秒` より短い区間は書き起こさずに捨てます（既定 0.1 秒）。  
 `話者は1人` にチェックを入れると、CLI の `--single-speaker` と同じく全区間を同じ話者として扱います。  
-`Whisper に渡す前に音量をそろえる` にチェックを入れると、CLI の `--normalize-volume` と同じく作業用 wav の音量をそろえます。
+`書き起こしの前に音量をそろえる` にチェックを入れると、CLI の `--normalize-volume` と同じく作業用 wav の音量をそろえます。
 
 ## CLI の使い方
 
@@ -204,8 +208,10 @@ python -m tranosuke denoise input.wav
 ### 3. IPU書き起こし
 
 ```bash
-python -m tranosuke transcribe input.wav --model-name turbo --beam-size 5
+python -m tranosuke transcribe input.wav
 ```
+
+既定では Ruby-ASR の `ruby-subtitle` で書き起こします。
 
 GPUを指定する場合:
 
@@ -213,7 +219,13 @@ GPUを指定する場合:
 python -m tranosuke transcribe input.wav --device cuda --device-index 0
 ```
 
-GUI の「クオリティ優先」と同じ設定にする場合:
+Ruby-ASR の逐語向けを使う場合:
+
+```bash
+python -m tranosuke transcribe input.wav --model-name ruby-verbatim
+```
+
+Whisper を使う場合（GUI の「Whisper large-v3（クオリティ優先）」と同じ設定）:
 
 ```bash
 python -m tranosuke transcribe input.wav --model-name large-v3 --beam-size 10
@@ -225,14 +237,32 @@ python -m tranosuke transcribe input.wav --model-name large-v3 --beam-size 10
 - 同一話者の短い隙間を結合
 - 無音区間検出でIPU候補を分割・微調整
 - `--min-ipu-ms` 未満の区間を捨てる
-- Whisperにバッファつき音声を渡して書き起こし
+- Whisper または Ruby-ASR にバッファつき音声を渡して書き起こし
 - 書き起こしを正規化（下記）
 - `IPU.csv` を出力
 
 重なり発話では Whisper は大きい方の声しか書き起こせないため、話者区間は重ならないものを使います。  
 `--single-speaker` を付けると、pyannote が別話者として切り出した区間もすべて同じ話者（`A`）として扱います。話者を置き換えた結果、区間の間隔が `--pause-threshold-ms` 以内になったものはつなげます。話者が1人だけの音声で、pyannote が同じ人を複数の話者に分けてしまう場合に使います（話者分離自体は実行するので、処理時間は短くなりません）。  
 `--normalize-volume` を付けると、変換後の作業用 wav（`*_mono.wav`、ノイズ低減をした場合はその出力）の音量をそろえて上書きします。発話部分（20 ミリ秒ごとの音量が最大から 40 dB 以内のフレーム）の RMS が -20 dBFS になるように持ち上げ、ピークが 0.99 を超える場合はそこで止めます。話者分離・書き起こし・アラインメントはすべて音量をそろえた音声を使い、保存される wav もその音声です（入力ファイル自体は変更しません）。録音レベルの小さい音声で、Whisper の聞き取りを安定させるために使います。  
-書き起こし時のバッファはWhisperに渡す音声だけに使います。出力されるIPU時刻は無音検出後の区間です。
+書き起こし時のバッファは書き起こしモデルに渡す音声だけに使います。出力されるIPU時刻は無音検出後の区間です。
+
+#### Ruby-ASR について
+
+- [qwen-asr](https://github.com/QwenLM/Qwen3-ASR) の transformers 版で動かします。IPU を長さ順に 32 個ずつまとめて渡すので、1 IPU ずつ渡す Whisper よりずっと速く終わります
+- 初めて使うときに、選んだ方のモデル（約 4GB）を Hugging Face から自動ダウンロードします
+- GPU では bfloat16 で動かし、VRAM は 9GB 前後使います。CPU でも動きますが遅くなります
+- Ruby-ASR は漢字の後ろに `漢字[かな]` の形でふりがなを付けることがあるので、`[...]` は外します
+- `--beam-size` は使いません
+
+千葉3人会話コーパスの 12 会話（5642 IPU、約 2.2 時間）で、eaf の単語アラインメントから作った IPU を正解にして文字誤り率（CER）を測った結果です。
+
+| モデル | CER |
+| --- | --- |
+| Ruby-ASR-1.7B `subtitle` | 18.9% |
+| Ruby-ASR-1.7B `verbatim` | 19.1% |
+| Qwen3-ASR-1.7B（追加学習なし） | 19.6% |
+
+Whisper large-v3（ビーム幅 10）は時間がかかるため、このうち 4 会話だけで測りました。同じ 4 会話では Whisper large-v3 が 28.1%、Qwen3-ASR-1.7B が 22.0% でした。
 
 書き起こしの正規化では、形態素解析と音素アラインメントで扱えるように次の変換をします。
 
@@ -308,7 +338,7 @@ pydomino の `min_aligned_timeframe`（pau 以外の各音素に割り当てる�
 ### 7. コーパスを一括作成
 
 ```bash
-python -m tranosuke corpus input.mp4 --model-name turbo --beam-size 5
+python -m tranosuke corpus input.mp4
 ```
 
 GPU0を使う場合:
@@ -471,6 +501,7 @@ GPU を別の処理で使っている場合は、`CUDA_VISIBLE_DEVICES=""` を�
 
 - [pyannote.audio](https://github.com/pyannote/pyannote-audio) / [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1): 話者分離
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper): Whisper書き起こし
+- [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) / [Ruby-ASR-1.7B](https://huggingface.co/hshispeech/Ruby-ASR-1.7B): Ruby-ASR 書き起こし
 - [pydomino](https://github.com/DwangoMediaVillage/pydomino): 音素アラインメント
 - [MeCab](https://taku910.github.io/mecab/) / [mecab-python3](https://github.com/SamuraiT/mecab-python3): 形態素解析
 - [UniDic-CSJ](https://clrd.ninjal.ac.jp/unidic/): 日本語形態素解析辞書

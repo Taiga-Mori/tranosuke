@@ -119,6 +119,21 @@ DEFAULT_FILLER_PROMPT = (
     "ん、ん〜、んー"
 )
 
+# Whisper 以外に使える書き起こしモデル（Qwen3-ASR-1.7B を日本語向けに追加学習したもの）
+# --model-name にこの名前を渡すと Qwen3-ASR で書き起こす。それ以外の名前は Whisper のモデル名として扱う
+RUBY_ASR_REPO = "hshispeech/Ruby-ASR-1.7B"
+QWEN_ASR_MODELS = {
+    # 字幕向けに学習したもの
+    "ruby-subtitle": (RUBY_ASR_REPO, "subtitle"),
+    # 逐語書き起こし向けに学習したもの
+    "ruby-verbatim": (RUBY_ASR_REPO, "verbatim"),
+}
+QWEN_ASR_BATCH_SIZE = 32
+QWEN_ASR_MAX_NEW_TOKENS = 256
+QWEN_ASR_LANGUAGES = {"ja": "Japanese", "en": "English"}
+FURIGANA_PATTERN = re.compile(r"\[[^\]]*\]")
+DEFAULT_MODEL_NAME = "ruby-subtitle"
+
 
 def merge_consecutive_turns(speaker_diarization, max_gap_s: float = 0.0) -> list[tuple[Segment, str]]:
     speaker_turns = sorted(
@@ -429,6 +444,41 @@ def _transcribe_segment_text(
     return "".join(segment.text.strip() for segment in segments if segment.text).strip()
 
 
+def is_qwen_asr_model(model_name: str) -> bool:
+    return model_name in QWEN_ASR_MODELS
+
+
+def _load_qwen_asr_model(model_name: str, device: str, device_index: int | None):
+    import torch
+    from huggingface_hub import snapshot_download
+    from qwen_asr import Qwen3ASRModel
+
+    repo_id, subfolder = QWEN_ASR_MODELS[model_name]
+    model_path = Path(snapshot_download(repo_id, allow_patterns=[f"{subfolder}/*"])) / subfolder
+    if device == "cuda":
+        device_map, dtype = f"cuda:{device_index or 0}", torch.bfloat16
+    elif device == "mps":
+        device_map, dtype = "mps", torch.bfloat16
+    else:
+        device_map, dtype = "cpu", torch.float32
+    return Qwen3ASRModel.from_pretrained(
+        str(model_path),
+        dtype=dtype,
+        device_map=device_map,
+        max_inference_batch_size=QWEN_ASR_BATCH_SIZE,
+        max_new_tokens=QWEN_ASR_MAX_NEW_TOKENS,
+    )
+
+
+def _transcribe_qwen_asr_batch(model, audios: list[np.ndarray], sample_rate: int, language: str) -> list[str]:
+    results = model.transcribe(
+        audio=[(audio.astype("float32", copy=False), sample_rate) for audio in audios],
+        language=QWEN_ASR_LANGUAGES.get(language, language),
+    )
+    # Ruby-ASR は漢字の後ろにふりがなを 漢字[かな] の形で付けることがあるので外す
+    return [FURIGANA_PATTERN.sub("", result.text) for result in results]
+
+
 def _is_cuda_device_ordinal_error(error: RuntimeError) -> bool:
     message = str(error)
     return "cudaErrorInvalidDevice" in message or "invalid device ordinal" in message
@@ -442,7 +492,7 @@ def _report_progress(progress_callback: ProgressCallback | None, value: float, m
 
 def transcribe_ipus(
     audio_path: str | Path,
-    model_name: str = "turbo",
+    model_name: str = DEFAULT_MODEL_NAME,
     pause_threshold_ms: int = DEFAULT_PAUSE_THRESHOLD_MS,
     beam_size: int = 5,
     language: str = "ja",
@@ -465,11 +515,15 @@ def transcribe_ipus(
 
     _report_progress(progress_callback, 0.05, "モデルを準備しています")
     runtime_device, device_index = _prepare_runtime_device(device, device_index)
+    use_qwen_asr = is_qwen_asr_model(model_name)
     whisper_device = _resolve_whisper_device(runtime_device)
-    whisper_kwargs = {"device": whisper_device}
-    if whisper_device == "cuda" and device_index is not None:
-        whisper_kwargs["device_index"] = device_index
-    model = WhisperModel(model_name, **whisper_kwargs)
+    if use_qwen_asr:
+        model = _load_qwen_asr_model(model_name, runtime_device, device_index)
+    else:
+        whisper_kwargs = {"device": whisper_device}
+        if whisper_device == "cuda" and device_index is not None:
+            whisper_kwargs["device_index"] = device_index
+        model = WhisperModel(model_name, **whisper_kwargs)
     fallback_cpu_model = None
     pipeline = _load_diarization_pipeline(_load_huggingface_token(), runtime_device, device_index)
 
@@ -543,8 +597,9 @@ def transcribe_ipus(
     speech_chunks = [
         chunk for chunk in speech_chunks if float(chunk["end"]) - float(chunk["start"]) >= min_ipu_s
     ]
-    total_chunks = max(len(speech_chunks), 1)
-    for chunk_index, chunk in enumerate(speech_chunks, start=1):
+    # まず全 IPU の音声を切り出し、そのあとモデルに渡す（Qwen3-ASR はまとめて渡すと速い）
+    segments = []
+    for chunk in speech_chunks:
         speech_start = float(chunk["start"])
         speech_end = float(chunk["end"])
         previous_chunks = [
@@ -572,29 +627,55 @@ def transcribe_ipus(
         chunk_audio = wav[chunk_start_sample:chunk_end_sample]
         if chunk_audio.size == 0:
             continue
+        segments.append((str(chunk["speaker"]), speech_start, speech_end, chunk_audio))
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav_file:
-            tmp_path = tmp_wav_file.name
+    total_segments = max(len(segments), 1)
 
-        try:
-            sf.write(tmp_path, chunk_audio, sample_rate)
+    def report_transcription_progress(done: int) -> None:
+        _report_progress(
+            progress_callback,
+            0.45 + 0.53 * (done / total_segments),
+            f"書き起こしています {done}/{len(segments)}",
+        )
+
+    texts = [""] * len(segments)
+    if use_qwen_asr:
+        # 長さの近いものを同じバッチにすると、パディングが減って速くなる
+        order = sorted(range(len(segments)), key=lambda index: len(segments[index][3]))
+        for batch_start in range(0, len(order), QWEN_ASR_BATCH_SIZE):
+            batch = order[batch_start : batch_start + QWEN_ASR_BATCH_SIZE]
+            batch_texts = _transcribe_qwen_asr_batch(
+                model, [segments[index][3] for index in batch], sample_rate, language
+            )
+            for index, text in zip(batch, batch_texts):
+                texts[index] = text
+            report_transcription_progress(batch_start + len(batch))
+    else:
+        for segment_index, (_, _, _, chunk_audio) in enumerate(segments):
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav_file:
+                tmp_path = tmp_wav_file.name
+
             try:
-                text = _transcribe_segment_text(model, tmp_path, beam_size, language)
-            except RuntimeError as error:
-                if whisper_device != "cuda" or not _is_cuda_device_ordinal_error(error):
-                    raise
-                if fallback_cpu_model is None:
-                    fallback_cpu_model = WhisperModel(model_name, device="cpu")
-                text = _transcribe_segment_text(fallback_cpu_model, tmp_path, beam_size, language)
-        finally:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+                sf.write(tmp_path, chunk_audio, sample_rate)
+                try:
+                    texts[segment_index] = _transcribe_segment_text(model, tmp_path, beam_size, language)
+                except RuntimeError as error:
+                    if whisper_device != "cuda" or not _is_cuda_device_ordinal_error(error):
+                        raise
+                    if fallback_cpu_model is None:
+                        fallback_cpu_model = WhisperModel(model_name, device="cpu")
+                    texts[segment_index] = _transcribe_segment_text(
+                        fallback_cpu_model, tmp_path, beam_size, language
+                    )
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            report_transcription_progress(segment_index + 1)
 
+    for (speaker, speech_start, speech_end, _), text in zip(segments, texts):
         text = normalize_ipu_text(text)
         if not text:
             continue
-
-        speaker = str(chunk["speaker"])
         ipus.append(
             {
                 "filename": source.stem,
@@ -607,12 +688,6 @@ def transcribe_ipus(
             }
         )
 
-        _report_progress(
-            progress_callback,
-            0.45 + 0.53 * (chunk_index / total_chunks),
-            f"書き起こしています {chunk_index}/{len(speech_chunks)}",
-        )
-
     _report_progress(progress_callback, 1.0, "IPU書き起こしが完了しました")
     return pd.DataFrame(ipus)
 
@@ -620,7 +695,7 @@ def transcribe_ipus(
 def transcribe_media_to_ipu_csv(
     input_path: str | Path,
     output_dir: str | Path | None = None,
-    model_name: str = "turbo",
+    model_name: str = DEFAULT_MODEL_NAME,
     beam_size: int = 5,
     pause_threshold_ms: int = DEFAULT_PAUSE_THRESHOLD_MS,
     device: str | None = None,

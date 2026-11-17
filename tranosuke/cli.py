@@ -11,7 +11,21 @@ from tranosuke.denoise import denoise_media
 from tranosuke.luu import build_luus_from_word_csv
 from tranosuke.media import convert_media_to_wavs
 from tranosuke.morphology import analyze_ipu_csv
-from tranosuke.transcription import DEFAULT_MIN_IPU_MS, normalize_ipu_table, transcribe_media_to_ipu_csv
+from tranosuke.transcription import (
+    DEFAULT_MIN_IPU_MS,
+    DEFAULT_MODEL_NAME,
+    QWEN_ASR_MODELS,
+    normalize_ipu_table,
+    transcribe_media_to_ipu_csv,
+)
+
+
+MODEL_NAME_HELP = (
+    "Whisper のモデル名（turbo, large-v3 など）、または "
+    + " / ".join(QWEN_ASR_MODELS)
+    + "（Ruby-ASR。--beam-size は使わない）。既定は "
+    + DEFAULT_MODEL_NAME
+)
 
 
 def _console_progress(value: float, message: str) -> None:
@@ -46,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe_parser = subparsers.add_parser("transcribe")
     transcribe_parser.add_argument("input_path")
     transcribe_parser.add_argument("--output-dir")
-    transcribe_parser.add_argument("--model-name", default="turbo")
+    transcribe_parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME, help=MODEL_NAME_HELP)
     transcribe_parser.add_argument("--beam-size", type=int, default=5)
     transcribe_parser.add_argument("--pause-threshold-ms", type=int, default=200)
     transcribe_parser.add_argument("--segment-buffer", type=float, default=0.1)
@@ -79,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_parser = subparsers.add_parser("corpus")
     corpus_parser.add_argument("input_path")
     corpus_parser.add_argument("--output-dir")
-    corpus_parser.add_argument("--model-name", default="turbo")
+    corpus_parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME, help=MODEL_NAME_HELP)
     corpus_parser.add_argument("--beam-size", type=int, default=5)
     corpus_parser.add_argument("--pause-threshold-ms", type=int, default=200)
     corpus_parser.add_argument("--segment-buffer", type=float, default=0.1)
