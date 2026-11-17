@@ -1,3 +1,8 @@
+import os
+
+# MPS 未対応の演算があっても落ちずに CPU で計算させる（torch を import する前に設定が必要）
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
 from tranosuke.alignment import align_phonemes_and_words
 from tranosuke.config import (
     AppPaths,

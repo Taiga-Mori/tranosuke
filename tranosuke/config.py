@@ -70,6 +70,15 @@ def detect_device() -> str:
     return "cpu"
 
 
+def is_mps_available() -> bool:
+    try:
+        import torch
+
+        return torch.backends.mps.is_available()
+    except Exception:
+        return False
+
+
 def list_cuda_devices() -> list[dict[str, int | str | None]]:
     try:
         import torch

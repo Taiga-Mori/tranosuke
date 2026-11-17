@@ -275,6 +275,8 @@ def _resolve_whisper_device(device: str) -> str:
 def _prepare_runtime_device(device: str | None, device_index: int | None) -> tuple[str, int | None]:
     paths = get_app_paths()
     runtime_device = device or paths.device
+    if runtime_device == "mps":
+        return ("mps" if detect_device() == "mps" else "cpu"), None
     if runtime_device != "cuda":
         return runtime_device, None
 
@@ -343,9 +345,9 @@ def _load_diarization_pipeline(token: str, device: str, device_index: int | None
     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-community-1", **kwargs)
 
     if device == "cuda":
-        import torch
-
         pipeline.to(torch.device(f"cuda:{device_index or 0}"))
+    elif device == "mps":
+        pipeline.to(torch.device("mps"))
     return pipeline
 
 
@@ -458,7 +460,8 @@ def _load_qwen_asr_model(model_name: str, device: str, device_index: int | None)
     if device == "cuda":
         device_map, dtype = f"cuda:{device_index or 0}", torch.bfloat16
     elif device == "mps":
-        device_map, dtype = "mps", torch.bfloat16
+        # MPS では bfloat16 より float16 の方が速い（M 系 Mac で約 2 割）
+        device_map, dtype = "mps", torch.float16
     else:
         device_map, dtype = "cpu", torch.float32
     return Qwen3ASRModel.from_pretrained(

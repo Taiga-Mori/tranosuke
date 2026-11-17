@@ -6,7 +6,7 @@ from pathlib import Path
 import streamlit as st
 
 from tranosuke.alignment import align_phonemes_and_words
-from tranosuke.config import initialize_app, list_cuda_devices, read_user_config, save_huggingface_token
+from tranosuke.config import initialize_app, is_mps_available, list_cuda_devices, read_user_config, save_huggingface_token
 from tranosuke.corpus import build_corpus
 from tranosuke.denoise import denoise_media
 from tranosuke.media import convert_media_to_wavs
@@ -54,6 +54,11 @@ def _device_selector(key: str) -> tuple[str | None, int | None]:
         )
         options.append(label)
         option_values[label] = ("cuda", int(device["index"]))
+
+    if is_mps_available():
+        label = "Apple GPU (MPS)"
+        options.append(label)
+        option_values[label] = ("mps", None)
 
     options.append("CPU")
     option_values["CPU"] = ("cpu", None)

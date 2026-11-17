@@ -161,7 +161,7 @@ GUIでは以下のタブを使えます。
 - `アラインメント`
 - `コーパス作成`
 
-`IPU書き起こし` と `コーパス作成` では処理デバイスを選択できます。GPUを使う場合はGUI上で対象GPUを選びます。  
+`IPU書き起こし` と `コーパス作成` では処理デバイスを選択できます。GPUを使う場合はGUI上で対象GPUを選びます。Apple Silicon の Mac では `Apple GPU (MPS)` を選べます（`自動` でも MPS を使います）。  
 書き起こしモデルは次の4つから選べます。
 
 | モード | モデル | `--model-name` | ビーム幅 |
@@ -219,6 +219,14 @@ GPUを指定する場合:
 python -m tranosuke transcribe input.wav --device cuda --device-index 0
 ```
 
+Apple Silicon の Mac で GPU（MPS）を使う場合:
+
+```bash
+python -m tranosuke transcribe input.wav --device mps
+```
+
+MPS で動くのは話者分離（pyannote）と Ruby-ASR です。Whisper（faster-whisper）は MPS に対応していないため、MPS を選んでも CPU で動きます。音素アラインメントとノイズ低減は常に CPU です。
+
 Ruby-ASR の逐語向けを使う場合:
 
 ```bash
@@ -250,7 +258,7 @@ python -m tranosuke transcribe input.wav --model-name large-v3 --beam-size 10
 
 - [qwen-asr](https://github.com/QwenLM/Qwen3-ASR) の transformers 版で動かします。IPU を長さ順に 32 個ずつまとめて渡すので、1 IPU ずつ渡す Whisper よりずっと速く終わります
 - 初めて使うときに、選んだ方のモデル（約 4GB）を Hugging Face から自動ダウンロードします
-- GPU では bfloat16 で動かし、VRAM は 9GB 前後使います。CPU でも動きますが遅くなります
+- GPU では bfloat16 で動かし、VRAM は 9GB 前後使います。Apple Silicon の MPS では float16 で動かします。CPU でも動きますが遅くなります
 - Ruby-ASR は漢字の後ろに `漢字[かな]` の形でふりがなを付けることがあるので、`[...]` は外します
 - `--beam-size` は使いません
 

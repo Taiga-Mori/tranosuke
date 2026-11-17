@@ -67,7 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe_parser.add_argument("--min-ipu-ms", type=int, default=DEFAULT_MIN_IPU_MS)
     transcribe_parser.add_argument("--single-speaker", action="store_true")
     transcribe_parser.add_argument("--normalize-volume", action="store_true")
-    transcribe_parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
+    transcribe_parser.add_argument("--device", choices=["cpu", "cuda", "mps"], default=None)
     transcribe_parser.add_argument("--device-index", type=int, default=None)
 
     normalize_parser = subparsers.add_parser("normalize")
@@ -100,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     corpus_parser.add_argument("--min-ipu-ms", type=int, default=DEFAULT_MIN_IPU_MS)
     corpus_parser.add_argument("--single-speaker", action="store_true")
     corpus_parser.add_argument("--normalize-volume", action="store_true")
-    corpus_parser.add_argument("--device", choices=["cpu", "cuda"], default=None)
+    corpus_parser.add_argument("--device", choices=["cpu", "cuda", "mps"], default=None)
     corpus_parser.add_argument("--device-index", type=int, default=None)
     corpus_parser.add_argument("--denoise", action="store_true")
 
