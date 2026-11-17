@@ -1,3 +1,4 @@
+import functools
 import shutil
 import subprocess
 import tempfile
@@ -7,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from tranosuke.config import get_app_paths
+from tranosuke.config import ensure_ffmpeg_runtime, is_runnable
 
 
 # normalize_wav_volume の目標: 発話部分の音量（RMS, dBFS）とピークの上限
@@ -47,23 +48,16 @@ class MediaConversionResult:
     channel_wavs: list[Path]
 
 
-def _resolve_media_tool(command_name: str) -> str:
-    paths = get_app_paths()
-    candidates = []
-    if paths.system == "Darwin":
-        candidates.append(paths.base_dir / "ffmpeg" / "mac" / command_name)
-    elif paths.system == "Windows":
-        candidates.append(paths.base_dir / "ffmpeg" / "win" / f"{command_name}.exe")
-
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-
-    resolved = shutil.which(command_name)
-    if resolved:
-        return resolved
-
-    raise FileNotFoundError(f"{command_name} が見つかりません。")
+@functools.lru_cache(maxsize=None)
+def _resolve_ffmpeg() -> str:
+    """Use the ffmpeg downloaded for this OS/CPU; fall back to the system one only if the download fails."""
+    try:
+        return str(ensure_ffmpeg_runtime())
+    except Exception as error:
+        system_ffmpeg = shutil.which("ffmpeg")
+        if system_ffmpeg and is_runnable(system_ffmpeg):
+            return system_ffmpeg
+        raise RuntimeError(f"ffmpeg を用意できませんでした: {error}") from error
 
 
 def _run_subprocess(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -75,7 +69,7 @@ def _probe_audio_channels(input_path: Path) -> int:
     with tempfile.TemporaryDirectory() as temp_dir:
         probe_wav = Path(temp_dir) / "probe.wav"
         command = [
-            _resolve_media_tool("ffmpeg"),
+            _resolve_ffmpeg(),
             "-v",
             "error",
             "-y",
@@ -98,7 +92,7 @@ def _probe_audio_channels(input_path: Path) -> int:
 
 def _convert_to_mono(input_path: Path, output_path: Path, sample_rate: int) -> Path:
     command = [
-        _resolve_media_tool("ffmpeg"),
+        _resolve_ffmpeg(),
         "-y",
         "-i",
         str(input_path),
@@ -116,7 +110,7 @@ def _convert_to_mono(input_path: Path, output_path: Path, sample_rate: int) -> P
 
 def _extract_single_channel(input_path: Path, output_path: Path, channel_index: int, sample_rate: int) -> Path:
     command = [
-        _resolve_media_tool("ffmpeg"),
+        _resolve_ffmpeg(),
         "-y",
         "-i",
         str(input_path),

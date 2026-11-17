@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import soundfile as sf
-import torchaudio
+import torch
 from faster_whisper import WhisperModel
 from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
@@ -508,10 +508,10 @@ def transcribe_ipus(
     """
     source = Path(audio_path).expanduser().resolve()
     _report_progress(progress_callback, 0.01, "音声を読み込んでいます")
-    waveform, sample_rate = torchaudio.load(str(source))
-    if waveform.ndim > 1 and waveform.shape[0] > 1:
-        waveform = waveform.mean(dim=0, keepdim=True)
-    wav = waveform.squeeze(0).numpy()
+    # torchaudio.load は torchcodec 経由で FFmpeg 共有ライブラリを要求するため soundfile で読む
+    audio, sample_rate = sf.read(str(source), dtype="float32", always_2d=True)
+    wav = audio.mean(axis=1)
+    waveform = torch.from_numpy(wav).unsqueeze(0)
 
     _report_progress(progress_callback, 0.05, "モデルを準備しています")
     runtime_device, device_index = _prepare_runtime_device(device, device_index)

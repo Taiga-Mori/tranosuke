@@ -2,6 +2,7 @@ from tranosuke.alignment import align_phonemes_and_words
 from tranosuke.config import (
     AppPaths,
     ensure_denoise_runtime,
+    ensure_ffmpeg_runtime,
     get_app_paths,
     initialize_app,
     read_user_config,
@@ -26,6 +27,7 @@ __all__ = [
     "denoise_media",
     "denoise_wav",
     "ensure_denoise_runtime",
+    "ensure_ffmpeg_runtime",
     "get_app_paths",
     "initialize_app",
     "read_user_config",
