@@ -32,7 +32,6 @@ LUU作成コードとCLIコマンドは残していますが、現在のGUIと�
 
 - Python 3.10 系
 - conda環境名: `tranosuke`
-- `ffmpeg`（`ffprobe` は不要）
 - Hugging Face アカウント
 - `pyannote/speaker-diarization-community-1` の利用規約への同意
 
@@ -111,9 +110,10 @@ CXXFLAGS="-include cstdint" pip install git+https://github.com/DwangoMediaVillag
 
 - UniDic-CSJ 辞書
 - `phoneme_transition_model.onnx`
+- OS・CPUに合った `ffmpeg` の静的ビルド（macOS / Linux は [martin-riedl.de](https://ffmpeg.martin-riedl.de/)、Windows は [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)）
 - ノイズ低減実行時のみ、DeepFilterNet の公式バイナリ
 
-`ffmpeg` はアプリ同梱版があればそれを優先し、なければシステムの `ffmpeg` を使います。
+`ffmpeg` は自分でインストールする必要はありません。ダウンロードに失敗した場合だけ、システムの `ffmpeg` があればそれを使います。
 
 ## Hugging Face トークン設定
 

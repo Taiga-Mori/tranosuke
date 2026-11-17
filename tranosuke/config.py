@@ -1,5 +1,6 @@
 import platform
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,16 @@ PYDOMINO_MODEL_URL = (
     "https://github.com/DwangoMediaVillage/pydomino/raw/main/onnx_model/phoneme_transition_model.onnx"
 )
 DEEPFILTERNET_RELEASES_API = "https://api.github.com/repos/Rikorose/DeepFilterNet/releases/latest"
+# (system, arm) -> 静的ビルドの ffmpeg 配布URL。macOS/Linux は martin-riedl.de、Windows は gyan.dev。
+FFMPEG_DOWNLOAD_URLS = {
+    ("Darwin", True): "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip",
+    ("Darwin", False): "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip",
+    ("Linux", True): "https://ffmpeg.martin-riedl.de/redirect/latest/linux/arm64/release/ffmpeg.zip",
+    ("Linux", False): "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffmpeg.zip",
+    ("Windows", False): "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+    # Windows on ARM は x64 エミュレーションで動く
+    ("Windows", True): "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+}
 
 
 @dataclass(frozen=True)
@@ -28,6 +39,8 @@ class AppPaths:
     phoneme_model_path: Path
     deepfilter_dir: Path
     deepfilter_binary_path: Path
+    ffmpeg_dir: Path
+    ffmpeg_binary_path: Path
     system: str
     machine: str
     device: str
@@ -100,6 +113,7 @@ def get_app_paths() -> AppPaths:
     machine = platform.machine().lower()
 
     deepfilter_binary = "deep-filter.exe" if system == "Windows" else "deep-filter"
+    ffmpeg_binary = "ffmpeg.exe" if system == "Windows" else "ffmpeg"
     return AppPaths(
         base_dir=base_dir,
         cache_dir=cache_dir,
@@ -111,6 +125,8 @@ def get_app_paths() -> AppPaths:
         phoneme_model_path=models_dir / "phoneme_transition_model.onnx",
         deepfilter_dir=tools_dir / "deepfilternet",
         deepfilter_binary_path=tools_dir / "deepfilternet" / deepfilter_binary,
+        ffmpeg_dir=tools_dir / "ffmpeg",
+        ffmpeg_binary_path=tools_dir / "ffmpeg" / ffmpeg_binary,
         system=system,
         machine=machine,
         device=detect_device(),
@@ -241,6 +257,52 @@ def ensure_denoise_runtime() -> AppPaths:
     return paths
 
 
+def is_runnable(executable: str | Path) -> bool:
+    """Check that a binary actually runs here (e.g. an x86_64 build fails on Apple Silicon without Rosetta)."""
+    try:
+        subprocess.run([str(executable), "-version"], check=True, capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def ensure_ffmpeg_runtime() -> Path:
+    """Download a static ffmpeg build for this OS/CPU into ~/.tranosuke (once, on first launch)."""
+    paths = get_app_paths()
+    _ensure_directories(paths)
+
+    if paths.ffmpeg_binary_path.exists() and is_runnable(paths.ffmpeg_binary_path):
+        return paths.ffmpeg_binary_path
+
+    is_arm = paths.machine in {"arm64", "aarch64"}
+    url = FFMPEG_DOWNLOAD_URLS.get((paths.system, is_arm))
+    if url is None:
+        raise RuntimeError(f"この環境向けの ffmpeg を自動取得できません: {paths.system} / {paths.machine}")
+
+    # 壊れた・別アーキテクチャの残骸があれば取り直す
+    shutil.rmtree(paths.ffmpeg_dir, ignore_errors=True)
+    extract_dir = paths.tools_dir / "ffmpeg_download"
+    shutil.rmtree(extract_dir, ignore_errors=True)
+    try:
+        download_and_extract(url, extract_dir)
+        binary_name = paths.ffmpeg_binary_path.name
+        candidates = sorted(
+            (path for path in extract_dir.rglob(binary_name) if path.is_file()),
+            key=lambda path: len(path.parts),
+        )
+        if not candidates:
+            raise FileNotFoundError(f"ダウンロードした ffmpeg が見つかりません: {extract_dir}")
+        paths.ffmpeg_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(candidates[0], paths.ffmpeg_binary_path)
+    finally:
+        shutil.rmtree(extract_dir, ignore_errors=True)
+
+    paths.ffmpeg_binary_path.chmod(0o755)
+    if not is_runnable(paths.ffmpeg_binary_path):
+        raise RuntimeError(f"ダウンロードした ffmpeg を実行できません: {paths.ffmpeg_binary_path}")
+    return paths.ffmpeg_binary_path
+
+
 def initialize_app(include_denoise: bool = False) -> AppPaths:
     """Prepare user config and officially downloadable runtime assets."""
     paths = get_app_paths()
@@ -248,6 +310,7 @@ def initialize_app(include_denoise: bool = False) -> AppPaths:
     _ensure_config_file(paths)
     _ensure_unidic(paths)
     _ensure_phoneme_model(paths)
+    ensure_ffmpeg_runtime()
 
     if include_denoise:
         ensure_denoise_runtime()

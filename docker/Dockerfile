@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y \
     python3.10-venv \
     git \
     cmake \
-    ffmpeg \
     build-essential \
     python3.10-dev \
     libffi-dev \
