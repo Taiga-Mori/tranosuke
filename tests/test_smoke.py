@@ -87,3 +87,30 @@ def test_build_corpus(tmp_path):
         df = pd.read_csv(csv_path)
         assert ",".join(df.columns) == columns, csv_path.name
         assert len(df) > 0, csv_path.name
+
+
+def test_clean_qwen_asr_text_removes_furigana_and_laugh():
+    from tranosuke.transcription import clean_qwen_asr_text
+
+    assert clean_qwen_asr_text("(L)") == ""
+    assert clean_qwen_asr_text("うん（L）そう漢字[かんじ]") == "うんそう漢字"
+    # 笑い以外の括弧や英字の L は残す
+    assert clean_qwen_asr_text("Lサイズ(大)") == "Lサイズ(大)"
+
+
+def test_local_qwen_asr_model_path(tmp_path, monkeypatch):
+    import tranosuke.transcription as transcription
+    import tranosuke.config as config
+
+    # Hugging Face のモデルは手元のパスを持たない
+    assert transcription.local_qwen_asr_model_path("ruby-verbatim") is None
+    assert transcription.is_qwen_asr_model_available("ruby-verbatim")
+
+    # config.yaml の LOCAL_ASR_MODELS が最優先。config.json が無ければ使えないとみなす
+    model_dir = tmp_path / "cejc"
+    monkeypatch.setattr(config, "read_user_config", lambda: {"LOCAL_ASR_MODELS": {"ruby-verbatim-cejc": str(model_dir)}})
+    assert transcription.local_qwen_asr_model_path("ruby-verbatim-cejc") == model_dir
+    assert not transcription.is_qwen_asr_model_available("ruby-verbatim-cejc")
+    model_dir.mkdir()
+    (model_dir / "config.json").write_text("{}")
+    assert transcription.is_qwen_asr_model_available("ruby-verbatim-cejc")

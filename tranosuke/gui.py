@@ -11,7 +11,12 @@ from tranosuke.corpus import build_corpus
 from tranosuke.denoise import denoise_media
 from tranosuke.media import convert_media_to_wavs
 from tranosuke.morphology import analyze_ipu_csv
-from tranosuke.transcription import DEFAULT_MIN_IPU_MS, transcribe_media_to_ipu_csv
+from tranosuke.transcription import (
+    DEFAULT_MIN_IPU_MS,
+    is_qwen_asr_model,
+    is_qwen_asr_model_available,
+    transcribe_media_to_ipu_csv,
+)
 
 
 _FAULT_LOG_FILE = None
@@ -20,9 +25,20 @@ _FAULT_LOG_FILE = None
 QUALITY_OPTIONS = {
     "Ruby-ASR 字幕向け（subtitle）": {"model_name": "ruby-subtitle", "beam_size": 5},
     "Ruby-ASR 逐語向け（verbatim）": {"model_name": "ruby-verbatim", "beam_size": 5},
+    # モデルを手元に置いているときだけ選択肢に出す（下の _available_quality_options）
+    "Ruby-ASR 逐語向け・日常会話（verbatim-cejc）": {"model_name": "ruby-verbatim-cejc", "beam_size": 5},
     "Whisper turbo（スピード優先）": {"model_name": "turbo", "beam_size": 5},
     "Whisper large-v3（クオリティ優先）": {"model_name": "large-v3", "beam_size": 10},
 }
+
+
+def _available_quality_options() -> list[str]:
+    """手元に置くモデル（ruby-verbatim-cejc）は、置いてあるときだけ選べるようにする。"""
+    return [
+        label
+        for label, options in QUALITY_OPTIONS.items()
+        if not is_qwen_asr_model(options["model_name"]) or is_qwen_asr_model_available(options["model_name"])
+    ]
 
 
 def _ensure_startup_assets() -> None:
@@ -130,7 +146,7 @@ def _denoise_tab() -> None:
 def _transcription_tab() -> None:
     st.subheader("話者分離と IPU 書き起こし")
     input_path = st.text_input("入力ファイル", key="transcribe_input")
-    quality = st.radio("書き起こしモデル", list(QUALITY_OPTIONS), key="transcribe_quality")
+    quality = st.radio("書き起こしモデル", _available_quality_options(), key="transcribe_quality")
     segment_buffer_s = st.number_input(
         "話者区間の前後バッファ 秒",
         min_value=0.0,
@@ -223,7 +239,7 @@ def _alignment_tab() -> None:
 def _corpus_tab() -> None:
     st.subheader("コーパスを一括作成")
     input_path = st.text_input("入力ファイル", key="corpus_input")
-    quality = st.radio("書き起こしモデル", list(QUALITY_OPTIONS), key="corpus_quality")
+    quality = st.radio("書き起こしモデル", _available_quality_options(), key="corpus_quality")
     use_denoise = st.checkbox("先にノイズ低減を行う", value=False, key="corpus_denoise")
     segment_buffer_s = st.number_input(
         "話者区間の前後バッファ 秒",

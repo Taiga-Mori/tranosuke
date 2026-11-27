@@ -216,3 +216,6 @@ dist/
 build/
 fast-music-remover/
 scripts/
+
+# 手元だけで使うモデル（CEJC で学習したものは配布できないので git に入れない）
+models/

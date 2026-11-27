@@ -171,6 +171,13 @@ GUIでは以下のタブを使えます。
 | Whisper turbo（スピード優先） | Whisper turbo | `turbo` | 5 |
 | Whisper large-v3（クオリティ優先） | Whisper large-v3 | `large-v3` | 10 |
 
+このほか、手元にモデルを置いた場合だけ `ruby-verbatim-cejc`（Ruby-ASR 逐語向けを日本語日常会話コーパスで追加学習したもの。相槌・フィラー・言いさしを落としにくい）を選べます。このモデルは配布していないので、自動ではダウンロードされません。とらのすけのフォルダの `models/ruby-verbatim-cejc/` に置くか、`~/.tranosuke/config.yaml` に次のように書きます。単独の笑いは書き起こしから取り除きます。
+
+```yaml
+LOCAL_ASR_MODELS:
+  ruby-verbatim-cejc: /path/to/ruby-verbatim-cejc
+```
+
 Ruby-ASR は Qwen3-ASR-1.7B を日本語向けに追加学習したモデルです。千葉3人会話コーパスで試したところ、Whisper large-v3 より誤りが少なく、処理も大幅に速くなりました（下記「Ruby-ASR について」）。
 
 `最小IPU長 秒` より短い区間は書き起こさずに捨てます（既定 0.1 秒）。  

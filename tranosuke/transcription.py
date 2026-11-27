@@ -122,12 +122,21 @@ DEFAULT_FILLER_PROMPT = (
 # Whisper 以外に使える書き起こしモデル（Qwen3-ASR-1.7B を日本語向けに追加学習したもの）
 # --model-name にこの名前を渡すと Qwen3-ASR で書き起こす。それ以外の名前は Whisper のモデル名として扱う
 RUBY_ASR_REPO = "hshispeech/Ruby-ASR-1.7B"
+# 値は (Hugging Face のリポジトリ, サブフォルダ)。リポジトリが None のものは手元に置いたモデルで、
+# config.yaml の LOCAL_ASR_MODELS に書いたパス、なければ <とらのすけのフォルダ>/models/<サブフォルダ>、
+# ~/.tranosuke/models/<サブフォルダ> の順に探す
 QWEN_ASR_MODELS = {
     # 字幕向けに学習したもの
     "ruby-subtitle": (RUBY_ASR_REPO, "subtitle"),
     # 逐語書き起こし向けに学習したもの
     "ruby-verbatim": (RUBY_ASR_REPO, "verbatim"),
+    # ruby-verbatim を日本語日常会話コーパス（CEJC）で追加学習したもの。相槌・フィラー・言いさし・笑いを落としにくい。
+    # CEJC の規約上、配布できるかは未確認なので Hugging Face には置かず、手元のモデルだけを使う
+    "ruby-verbatim-cejc": (None, "ruby-verbatim-cejc"),
 }
+# CEJC で追加学習したモデルは、単独の笑いを (L) と書き起こす。後段の形態素解析・音素アラインメントは
+# 笑いを扱えないので、書き起こしの段階で取り除く
+LAUGH_PATTERN = re.compile(r"[(（]\s*L\s*[)）]")
 QWEN_ASR_BATCH_SIZE = 32
 QWEN_ASR_MAX_NEW_TOKENS = 256
 QWEN_ASR_LANGUAGES = {"ja": "Japanese", "en": "English"}
@@ -450,13 +459,44 @@ def is_qwen_asr_model(model_name: str) -> bool:
     return model_name in QWEN_ASR_MODELS
 
 
+def local_qwen_asr_model_path(model_name: str) -> Path | None:
+    """手元に置くモデルのパス（Hugging Face から取るモデルなら None）。"""
+    from tranosuke.config import get_app_paths, read_user_config
+
+    repo_id, subfolder = QWEN_ASR_MODELS[model_name]
+    if repo_id is not None:
+        return None
+    configured = (read_user_config().get("LOCAL_ASR_MODELS") or {}).get(model_name)
+    if configured:
+        return Path(configured).expanduser()
+    # とらのすけのフォルダの models/（git には入れない）、なければ ~/.tranosuke/models/ を探す
+    paths = get_app_paths()
+    candidates = [paths.base_dir / "models" / subfolder, paths.models_dir / subfolder]
+    return next((path for path in candidates if (path / "config.json").exists()), candidates[0])
+
+
+def is_qwen_asr_model_available(model_name: str) -> bool:
+    """使えるモデルか。Hugging Face のモデルは常に True、手元のモデルは置いてあるときだけ True。"""
+    local_path = local_qwen_asr_model_path(model_name)
+    return local_path is None or (local_path / "config.json").exists()
+
+
 def _load_qwen_asr_model(model_name: str, device: str, device_index: int | None):
     import torch
     from huggingface_hub import snapshot_download
     from qwen_asr import Qwen3ASRModel
 
     repo_id, subfolder = QWEN_ASR_MODELS[model_name]
-    model_path = Path(snapshot_download(repo_id, allow_patterns=[f"{subfolder}/*"])) / subfolder
+    if repo_id is None:
+        model_path = local_qwen_asr_model_path(model_name)
+        if not (model_path / "config.json").exists():
+            raise FileNotFoundError(
+                f"{model_name} のモデルが見つかりません: {model_path}\n"
+                f"このモデルは自動ではダウンロードされません。モデルのフォルダをとらのすけのフォルダの models/ に置くか、"
+                f"~/.tranosuke/config.yaml の LOCAL_ASR_MODELS に {model_name}: <フォルダのパス> を書いてください。"
+            )
+    else:
+        model_path = Path(snapshot_download(repo_id, allow_patterns=[f"{subfolder}/*"])) / subfolder
     if device == "cuda":
         device_map, dtype = f"cuda:{device_index or 0}", torch.bfloat16
     elif device == "mps":
@@ -479,7 +519,12 @@ def _transcribe_qwen_asr_batch(model, audios: list[np.ndarray], sample_rate: int
         language=QWEN_ASR_LANGUAGES.get(language, language),
     )
     # Ruby-ASR は漢字の後ろにふりがなを 漢字[かな] の形で付けることがあるので外す
-    return [FURIGANA_PATTERN.sub("", result.text) for result in results]
+    return [clean_qwen_asr_text(result.text) for result in results]
+
+
+def clean_qwen_asr_text(text: str) -> str:
+    """ふりがな（漢字[かな]）と笑い（(L)）を取り除く。"""
+    return LAUGH_PATTERN.sub("", FURIGANA_PATTERN.sub("", text))
 
 
 def _is_cuda_device_ordinal_error(error: RuntimeError) -> bool:
